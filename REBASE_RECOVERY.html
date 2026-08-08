@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TwitchSync — Rebase Recovery Report</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%239147ff'/%3E%3Cpath d='M9 7l8 5-8 5z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f6f6f8; --panel-2: #ededf1; --border: #d9d9e0;
+    --text: #1f1f23; --text-dim: #56565f; --text-faint: #85858f;
+    --accent: #7b2ff2; --code-bg: #f0f0f4; --kbd-bg: #ffffff;
+    --ok: #1a7f4b; --ok-bg: #eaf7f0; --ok-border: #a8dcc0;
+    --warn: #9a6410; --warn-bg: #fff4e8; --warn-border: #f0c48e;
+    --bad: #b3261e; --bad-bg: #fdecea; --bad-border: #f2b8b5;
+    --info-bg: #f3ecff; --info-border: #c9aef7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e0e10; --panel: #18181b; --panel-2: #1f1f23; --border: #2f2f35;
+      --text: #efeff1; --text-dim: #adadb8; --text-faint: #7d7d88;
+      --accent: #a970ff; --code-bg: #1f1f23; --kbd-bg: #26262c;
+      --ok: #5fd28a; --ok-bg: #10241a; --ok-border: #2c5c40;
+      --warn: #f0a04b; --warn-bg: #2b2113; --warn-border: #6e5426;
+      --bad: #ff8080; --bad-bg: #2b1517; --bad-border: #6e2f2f;
+      --info-bg: #1d1531; --info-border: #4c3a78;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 940px; margin: 0 auto; padding: 40px 28px 120px; }
+
+  .doc-badge { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: .4px; color: var(--accent); }
+  .doc-badge svg { width: 26px; height: 26px; }
+  h1 { font-size: 40px; line-height: 1.12; letter-spacing: -0.8px; margin: 10px 0 8px; }
+  .subtitle { color: var(--text-dim); font-size: 18px; margin: 0 0 20px; max-width: 47em; }
+  .meta-line { color: var(--text-faint); font-size: 13.5px; border-top: 1px solid var(--border); padding-top: 14px; }
+
+  h2 { font-size: 25px; letter-spacing: -0.4px; margin: 60px 0 14px; padding-bottom: 8px; border-bottom: 2px solid var(--border); scroll-margin-top: 20px; }
+  h3 { font-size: 19px; margin: 32px 0 8px; scroll-margin-top: 20px; }
+  p { margin: 10px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 26px; } li { margin: 5px 0; }
+  strong { font-weight: 650; }
+  blockquote { border-left: 3px solid var(--border); margin: 14px 0; padding: 6px 0 6px 18px; color: var(--text-dim); }
+
+  code { font: 0.87em/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; overflow-wrap: anywhere; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; overflow-x: auto; }
+  pre code { background: none; border: none; padding: 0; font-size: 13.5px; }
+
+  .table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--panel); font-weight: 650; }
+  td.nowrap, th.nowrap { white-space: nowrap; }
+  tbody tr:nth-child(even) { background: color-mix(in srgb, var(--panel) 45%, transparent); }
+
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px 26px; margin: 28px 0; }
+  .toc h2 { border: none; margin: 0 0 10px; padding: 0; font-size: 17px; }
+  .toc ol { columns: 2; column-gap: 40px; margin: 0; padding-left: 22px; font-size: 15px; }
+  .toc li { margin: 4px 0; break-inside: avoid; }
+  @media (max-width: 680px) { .toc ol { columns: 1; } }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 22px 0; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat .n { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; display: block; }
+  .stat .l { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; display: block; }
+
+  .callout { border-radius: 10px; border: 1px solid; padding: 12px 16px; margin: 16px 0; font-size: 15px; }
+  .callout p { margin: 6px 0; }
+  .callout .label { font-weight: 700; letter-spacing: .3px; font-size: 12.5px; text-transform: uppercase; }
+  .c-info { background: var(--info-bg); border-color: var(--info-border); } .c-info .label { color: var(--accent); }
+  .c-warn { background: var(--warn-bg); border-color: var(--warn-border); } .c-warn .label { color: var(--warn); }
+  .c-ok   { background: var(--ok-bg);   border-color: var(--ok-border); }   .c-ok .label   { color: var(--ok); }
+
+  .pill { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; border: 1px solid; white-space: nowrap; display: inline-block; }
+  .p-bad { color: var(--bad); border-color: var(--bad-border); background: var(--bad-bg); }
+  .p-warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-bg); }
+  .p-ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-bg); }
+  .p-dim { color: var(--text-dim); border-color: var(--border); background: var(--panel-2); }
+
+  .tl { list-style: none; padding: 0; margin: 18px 0; }
+  .tl > li { position: relative; padding: 0 0 22px 28px; border-left: 2px solid var(--border); }
+  .tl > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .tl > li::before { content: ""; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  .tl h3 { margin: 0 0 4px; font-size: 17px; }
+
+  .file-tree { font: 13.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  footer { margin-top: 70px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <span class="doc-badge">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5" fill="#9147ff"/><path d="M9 7l8 5-8 5z" fill="#fff"/></svg>
+    TWITCHSYNC
+  </span>
+  <h1>Rebase Recovery Report</h1>
+  <p class="subtitle">How a project that appeared destroyed by a git rebase was assessed, restored, re-verified end to end, and committed — with the method, the evidence, and the lessons, so the next incident (if any) is a non-event.</p>
+  <p class="meta-line">
+    <strong>Incident:</strong> project lost during a git rebase; files hand-restored by the owner from recovered copies &nbsp;·&nbsp;
+    <strong>Recovery session:</strong> 8 August 2026 &nbsp;·&nbsp;
+    <strong>Outcome:</strong> fully working, verified, committed as <code>c2026f3</code> &nbsp;·&nbsp;
+    <strong>Net loss:</strong> one file (<code>README.md</code>), recreated verbatim
+  </p>
+</header>
+
+<div class="stats">
+  <div class="stat"><span class="n">15 / 16</span><span class="l">audited files recovered intact</span></div>
+  <div class="stat"><span class="n">1</span><span class="l">file lost &amp; recreated (README.md)</span></div>
+  <div class="stat"><span class="n">0</span><span class="l">recovered files rewritten</span></div>
+  <div class="stat"><span class="n">~20</span><span class="l">integrity markers checked</span></div>
+  <div class="stat"><span class="n">37</span><span class="l">VODs re-verified serving</span></div>
+  <div class="stat"><span class="n">+3,354</span><span class="l">lines protected in commit c2026f3</span></div>
+</div>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#incident">The incident &amp; starting state</a></li>
+    <li><a href="#strategy">Recovery strategy: audit, don't rebuild</a></li>
+    <li><a href="#audit">The four-layer audit</a></li>
+    <li><a href="#artifacts">Evidence from the owner's artifacts</a></li>
+    <li><a href="#findings">Findings: survived / lost / changed</a></li>
+    <li><a href="#actions">Actions taken (minimal intervention)</a></li>
+    <li><a href="#verification">Runtime re-verification results</a></li>
+    <li><a href="#commit">The protective commit</a></li>
+    <li><a href="#lessons">Why this worked — lessons &amp; recommendations</a></li>
+    <li><a href="#residual">Residual gaps</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="incident">1. The incident &amp; starting state</h2>
+
+<p>After the original build session (documented in <code>DEVELOPMENT_SUMMARY.html</code>), the project was lost during a git rebase. The owner recovered what they could by hand, placed the recovered copies back into the working tree, and asked for a rebuild guided by the two HTML documents, four screenshots of the finished app, and three recovered markdown notes.</p>
+
+<p>The repository as it arrived for recovery:</p>
+
+<ul>
+  <li><strong>History reduced to two commits</strong> — <code>0c7399b init</code> and <code>6c49b8e Initial commit</code>. The mid-session history (the GitHub Desktop-era commits with README/LICENSE/.gitattributes) was gone; <code>LICENSE</code> and <code>.gitattributes</code> themselves survived on disk as tracked files.</li>
+  <li><strong>Everything else untracked</strong> — <code>server.py</code>, the whole <code>static/</code> tree, <code>USER_GUIDE.html</code>, <code>icon.png</code>, and the owner's new recovery artifacts all showed as <code>??</code> in <code>git status</code>. Nothing that mattered was protected by a commit.</li>
+  <li><strong><code>example.png</code> staged as deleted</strong> (the original design-reference screenshot, tracked in <code>init</code>).</li>
+  <li><strong><code>README.md</code> missing entirely.</strong></li>
+  <li><strong>The unused <code>&nbsp;-&nbsp;CHAT.mp4</code> render absent</strong> from the project folder (the app never used it; deletion had been explicitly documented as safe).</li>
+  <li>New in the root: <code>screenshot1–4.png</code> and three markdown notes — <code>TwitchSync plan.md</code>, <code>TwitchSync plan (detailed).md</code>, <code>TwitchSync synology notes.md</code>.</li>
+  <li>Media pair (23.9&nbsp;GB MP4 + 90&nbsp;MB chat JSON), <code>folders.json</code> (the NAS library config), and <code>.claude/launch.json</code> all present; the Synology share still mounted at <code>/Volumes/SHARE1821</code>.</li>
+</ul>
+
+<div class="callout c-warn"><p class="label">Provenance note</p>
+<p>The exact mechanics of the loss and of the owner's recovery are unknown to this report — the recovered copies arrived as working-tree files with no history. That is precisely why the recovery below is structured as <em>trust-but-verify</em>: every recovered file was treated as unproven until it passed the audit.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="strategy">2. Recovery strategy: audit, don't rebuild</h2>
+
+<p>The owner's request was to <em>rebuild</em> from the documentation. The actual situation allowed something much stronger. Three sources of truth were available, and they ranked like this:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Rank</th><th class="nowrap">Source</th><th>What it provides</th><th>Fidelity</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1</td><td class="nowrap">The build session's own context</td>
+      <td>The recovery ran in a continuation of the original build session, whose context still contained the <strong>complete, verbatim content of every file written</strong> — every <code>Write</code> and every <code>Edit</code>.</td>
+      <td>Exact — byte-level ground truth</td>
+    </tr>
+    <tr>
+      <td>2</td><td class="nowrap">The recovered files themselves</td>
+      <td>Possibly perfect copies; possibly stale or partial versions. Unknown until audited.</td>
+      <td>Unknown → became "exact" after verification</td>
+    </tr>
+    <tr>
+      <td>3</td><td class="nowrap">Docs, notes, screenshots</td>
+      <td><code>USER_GUIDE.html</code>, <code>DEVELOPMENT_SUMMARY.html</code>, the three recovered notes, four screenshots. Describe intended behaviour, architecture, and every design decision — enough to re-implement faithfully, but only to <em>behavioural</em> fidelity, not byte fidelity.</td>
+      <td>Behavioural</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>Because source&nbsp;#1 existed, the correct strategy was not reconstruction at all: it was to <strong>audit the recovered files against in-context originals, restore only what failed or was missing, and re-verify the running application</strong>. Rewriting files that were already perfect would have added churn, risked introducing new defects into verified code, and destroyed the evidence trail of what the recovery actually contained.</p>
+
+<div class="callout c-info"><p class="label">Where the docs still earned their keep</p>
+<p>The documentation wasn't wasted effort. It served as an independent cross-check on the audit (the recovered notes matched the in-context plan word for word, corroborating that the owner's recovery drew on genuine session output), and it remains the designated fallback: had the session context <em>not</em> been available, <code>DEVELOPMENT_SUMMARY.html</code>'s sixteen decision records, defect log, API reference, and data-format appendix were written specifically so a human or AI developer could rebuild to behavioural equivalence. This incident is the argument for keeping that document current.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="audit">3. The four-layer audit</h2>
+
+<p>Each layer is cheap relative to the next and filters what the next must prove. All four ran before any file was modified (the assessment happened under plan mode, which enforces read-only work — a constraint that usefully prevented any "helpful" premature rewriting).</p>
+
+<ol class="tl">
+  <li>
+    <h3>Layer 1 — Inventory and line counts</h3>
+    <p>Full tree listing, fresh <code>git status</code>, and <code>wc -l</code> across every file with a known expected size. Result: <strong>all ten line-countable files matched exactly</strong> — <code>server.py</code> 598, <code>index.html</code> 118, <code>style.css</code> 307, <code>chat.js</code> 351, <code>library.js</code> 149, <code>main.js</code> 125, <code>player.js</code> 493, <code>util.js</code> 92, <code>USER_GUIDE.html</code> 752, <code>DEVELOPMENT_SUMMARY.html</code> 866. One expected file failed to appear at all: <code>README.md</code>.</p>
+    <p>An exact line-count match on ten files simultaneously is strong evidence, but it is deliberately treated as <em>only</em> evidence — a stale copy could coincide on length. Hence layer 2.</p>
+  </li>
+  <li>
+    <h3>Layer 2 — Feature and fix markers</h3>
+    <p>Around twenty <code>grep</code> probes, each chosen because it distinguishes the <em>final</em> version of a file from every earlier version that existed during development. A stale recovery would fail these even with plausible sizes. Every probe passed:</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th class="nowrap">File</th><th>Markers checked</th><th>What their presence proves</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><code>server.py</code></td><td><code>def do_POST</code>, <code>def list_volumes</code>, <code>by_lower</code>, <code>_log_q = queue.Queue</code>, <code>def handle(self)</code>, <code>"/icon.png"</code>, <code>v["stem"] == vid</code></td><td>Multi-folder NAS era with the folder API, volume suggestions, case-insensitive pairing (BUG-04 fix), the log-queue freeze fix (BUG-05), the keep-alive reset guard (BUG-02), the logo route, and the old-bookmark stem fallback</td></tr>
+        <tr><td class="nowrap"><code>player.js</code></td><td><code>const show = (node, visible)</code>, <code>e.code === "Space"</code>, <code>encodeURIComponent(this.vod.id)</code></td><td>SVG icon fix (BUG-01), space-key hardening (BUG-03), composite-ID media URLs</td></tr>
+        <tr><td class="nowrap"><code>chat.js</code></td><td><code>vod.id</code>, <code>emote-zw</code>, <code>sniffImageMime</code></td><td>Composite IDs, zero-width emote overlays, per-asset MIME sniffing</td></tr>
+        <tr><td class="nowrap"><code>main.js</code> / <code>library.js</code></td><td><code>renderFolders</code>, <code>v.stem === id</code>, <code>action: "add"</code>, <code>vol-chip</code></td><td>Folder-manager wiring, client-side stem fallback, add/remove mutations, volume chips</td></tr>
+        <tr><td class="nowrap"><code>index.html</code> / <code>style.css</code></td><td><code>folders-panel</code>, <code>lib-logo</code>, <code>.folder-row</code>, <code>.vod-where</code></td><td>Folder-manager markup, header logo, per-VOD folder tags</td></tr>
+        <tr><td class="nowrap"><code>util.js</code></td><td><code>sniffImageMime</code>, <code>colorHash</code>, <code>readableColor</code></td><td>Final helper set</td></tr>
+        <tr><td class="nowrap">docs</td><td><code>id="folders"</code> in the guide; <code>ADR-16</code>, <code>BUG-05</code> in the summary</td><td>Both documents are the final revisions, including the NAS sections</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </li>
+  <li>
+    <h3>Layer 3 — Static validity</h3>
+    <p><code>server.py</code> parsed with <code>ast.parse()</code> (chosen over <code>py_compile</code> because it writes nothing — plan mode was still active). Config files read back correct: <code>folders.json</code> still pointed at <code>/Volumes/SHARE1821/VODs</code>, <code>.claude/launch.json</code> still defined the port-8710 dev server.</p>
+  </li>
+  <li>
+    <h3>Layer 4 — Runtime verification</h3>
+    <p>The definitive gate, run after plan approval: start the server from the recovered code and put it through the same curl and browser suite the original passed (<a href="#verification">§7</a>). Files that look right and files that work are different claims; only this layer proves the second.</p>
+  </li>
+</ol>
+
+<div class="callout c-info"><p class="label">Why no byte-for-byte diff?</p>
+<p>A literal diff would have required writing reference copies to disk during the read-only assessment phase. Rather than bend that constraint, the audit stacked line counts + version-discriminating markers + parse validity + full runtime behaviour. Any stale or corrupted recovery would have to defeat all four layers simultaneously to slip through — and layer&nbsp;4 alone exercises effectively every code path the app has.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="artifacts">4. Evidence from the owner's artifacts</h2>
+
+<p>The owner included seven recovery artifacts. Each was examined and each contributed something concrete:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Artifact</th><th>What it is</th><th>What it established</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap"><code>TwitchSync plan.md</code></td><td>The approved implementation plan from the original session</td><td>Matches the in-context plan verbatim — corroborates the recovery drew on genuine session output</td></tr>
+    <tr><td class="nowrap"><code>TwitchSync plan (detailed).md</code></td><td>The brief given to the Plan subagent (verified facts, constraints, pitfalls)</td><td>Preserves the design ground truth independently of this session's context</td></tr>
+    <tr><td class="nowrap"><code>TwitchSync synology notes.md</code></td><td>The NAS-feature write-up (142&nbsp;ms seek result, BUG-04/BUG-05 explanations, validation matrix)</td><td>Confirms the recovered <code>server.py</code> should contain the NAS features — which layer&nbsp;2 then found</td></tr>
+    <tr><td class="nowrap"><code>screenshot1.png</code></td><td>Library page with the folder manager open</td><td>Folder manager UI (project folder + 36-VOD NAS root + volume chip + validation message) matches the recovered code's behaviour</td></tr>
+    <tr><td class="nowrap"><code>screenshot2.png</code></td><td>Player in a real browser tab at 3:00:47</td><td>Chat sync, emotes, badges, histogram all rendering in the owner's own Chrome — and the URL bar shows a <em>bare-stem</em> <code>?v=</code> bookmark, the exact form the composite-ID fallback exists to keep working</td></tr>
+    <tr><td class="nowrap"><code>screenshot3.png</code></td><td>Full Chrome window, 4:12&nbsp;AM, VOD at its end (6:47:26&nbsp;/&nbsp;6:47:26)</td><td>The owner genuinely watched a full VOD in the app on their own machine</td></tr>
+    <tr><td class="nowrap"><code>screenshot4.png</code></td><td>A 13:58:23 NAS VOD playing with chat, no browser chrome visible</td><td><strong>Fullscreen works in a real browser</strong> — closing the one verification item the original session could never test (the embedded preview pane denies the Fullscreen API). Also shows a VOD never touched during development streaming correctly.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="findings">5. Findings: survived / lost / changed</h2>
+
+<h3>Survived intact (verified)</h3>
+<pre class="file-tree"><code>server.py            598 lines  ✓ all markers        static/js/player.js   493 lines  ✓ all markers
+static/index.html    118 lines  ✓ all markers        static/js/chat.js     351 lines  ✓ all markers
+static/style.css     307 lines  ✓ all markers        static/js/library.js  149 lines  ✓ all markers
+static/js/util.js     92 lines  ✓ all markers        static/js/main.js     125 lines  ✓ all markers
+USER_GUIDE.html      752 lines  ✓ final revision     DEVELOPMENT_SUMMARY.html  866 lines  ✓ final revision
+icon.png             ✓ present                       folders.json          ✓ NAS path preserved
+.claude/launch.json  ✓ intact                        media pair (MP4+JSON) ✓ present, NAS mounted</code></pre>
+
+<h3>Lost</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Item</th><th class="nowrap">Severity</th><th>Disposition</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap"><code>README.md</code> (71 lines)</td><td class="nowrap"><span class="pill p-warn">recreated</span></td><td>The only genuine loss. Recreated <strong>verbatim from session context</strong> — the owner's original description line, quick start, CLI options, Library folders, Adding VODs, Player summary, How it works, and the guide link — not paraphrased from documentation.</td></tr>
+    <tr><td class="nowrap"><code>example.png</code></td><td class="nowrap"><span class="pill p-dim">accepted</span></td><td>The original design-reference screenshot, staged-deleted and listed in the owner's <code>.gitignore</code>. Its purpose is fully served: the app exists and four screenshots of the real thing replace it. Deletion committed as-is.</td></tr>
+    <tr><td class="nowrap"><code>…&nbsp;-&nbsp;CHAT.mp4</code></td><td class="nowrap"><span class="pill p-dim">accepted</span></td><td>The 3.57&nbsp;GB rendered chat video. The app never used it (that was the point of the design) and its deletion was a documented space-saving recommendation.</td></tr>
+    <tr><td class="nowrap">Git history</td><td class="nowrap"><span class="pill p-dim">accepted</span></td><td>The mid-session commits are unrecoverable and uninteresting: the working tree is the final state, and both HTML documents preserve the development narrative better than the lost commit messages did. No history surgery attempted.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Changed relative to the pre-loss state (owner's intent, respected)</h3>
+<ul>
+  <li><strong><code>.gitignore</code></strong> came back in a variant the owner edited: it ignores <code>DEVELOPMENT_SUMMARY.html</code> but no longer <code>USER_GUIDE.html</code> — meaning the guide is now <em>tracked</em>. Respected as-is; the only change made was appending the <code>__pycache__/</code> line the owner had asked about immediately before the loss (that conversation's answer was "yes, add it" — the incident interrupted the action).</li>
+  <li><strong>Seven recovery artifacts</strong> now live in the project root. Left exactly where the owner put them and included in the protective commit, since preserving recovered material is the entire point of that commit.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="actions">6. Actions taken (minimal intervention)</h2>
+
+<p>The complete write-set of the recovery, in order:</p>
+
+<ol>
+  <li><strong>Recreated <code>README.md</code></strong> — 71 lines, verbatim from context.</li>
+  <li><strong>Appended to <code>.gitignore</code>:</strong>
+<pre><code># Python bytecode
+__pycache__/</code></pre>
+  All other entries untouched.</li>
+  <li><strong>Ran the full runtime verification</strong> (<a href="#verification">§7</a>) — no fixes were needed; the recovered code passed everything first try.</li>
+  <li><strong>Committed the working tree</strong> (<a href="#commit">§8</a>).</li>
+</ol>
+
+<div class="callout c-ok"><p class="label">What was deliberately not done</p>
+<p>No recovered file was rewritten, reformatted, or "cleaned up" — zero churn on the 15 verified files. No git history surgery: one ordinary commit on top of the two surviving commits. No changes to the owner's <code>.gitignore</code> decisions beyond the pre-agreed line. Restraint is a feature of a recovery: every unnecessary write is a fresh chance to break something that just finished proving itself intact.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="verification">7. Runtime re-verification results</h2>
+
+<p>Server started from the recovered code via the existing launch config (port 8710). Every check below ran against that instance, and every one passed on the first attempt.</p>
+
+<h3>7.1 API and streaming (curl)</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Check</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /api/videos</code></td><td><strong>37 VODs</strong> — 36 from the NAS root (<code>VODs</code>), 1 from the project folder; correct titles/durations (sample: "TOP NUMBER ONE 19k PLAYER…", 45,482&nbsp;s)</td></tr>
+    <tr><td><code>GET /api/folders</code></td><td>Project folder (1 VOD, non-removable) + NAS folder (36 VODs, removable), both online; <code>SHARE1821</code> offered as a volume chip</td></tr>
+    <tr><td><code>Range: bytes=100-199</code></td><td><code>206</code>, exactly 100 bytes</td></tr>
+    <tr><td><code>Range: bytes=999999999999-</code></td><td><code>416</code></td></tr>
+    <tr><td><code>Range: bytes=-100</code> (suffix form used for the <code>moov</code> tail)</td><td><code>206</code>, exactly 100 bytes</td></tr>
+    <tr><td>Bare-stem <code>?v=</code> (pre-multi-folder bookmark form)</td><td><code>206</code> — the composite-ID fallback works, so the owner's existing bookmarks (visible in screenshot 2) keep functioning</td></tr>
+    <tr><td><code>GET /icon.png</code></td><td><code>200</code>, <code>image/png</code></td></tr>
+    <tr><td><code>?v=../../../etc/passwd</code></td><td><code>404</code> — traversal defence intact</td></tr>
+    <tr><td>POST with form content type (CSRF probe)</td><td><code>415</code> — cross-origin protection intact</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>7.2 Application (browser)</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Check</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Library page</td><td>Logo, Folders button, 37 cards with per-folder tags — matches screenshot 1's layout</td></tr>
+    <tr><td>Open project-folder VOD by composite-ID URL</td><td>Plays; duration 24,446.33&nbsp;s reads correctly</td></tr>
+    <tr><td>Deep seek to 3:00:00</td><td>Chat rebuilt to exactly <strong>2:59:13&nbsp;→&nbsp;3:00:19</strong> (backfill + live tail); 69 messages; <strong>89 chat images, 100% <code>blob:</code> scheme, 0 broken</strong> — offline rendering intact</td></tr>
+    <tr><td>Back to library → teardown</td><td>Returns to the 37-card library cleanly</td></tr>
+    <tr><td>Open NAS VOD (43.7&nbsp;GB, 12.63&nbsp;h, over SMB)</td><td>Streams and plays (<code>readyState 4</code>) — and <strong>auto-resumed at 10:00:55</strong> from the position saved during the <em>original</em> session: browser <code>localStorage</code> sits outside git and sailed through the incident untouched, keyed by filename stem exactly as designed</td></tr>
+    <tr><td>Console errors</td><td>None</td></tr>
+    <tr><td>Server error log</td><td>None</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="commit">8. The protective commit</h2>
+
+<p>The final and most important step — the incident happened precisely because everything of value was untracked. Commit <code>c2026f3</code> on <code>main</code>, on top of the two surviving commits:</p>
+
+<pre><code>c2026f3  Restore project after rebase loss; verified working   ← 20 files, +3,354 lines
+0c7399b  init
+6c49b8e  Initial commit</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">In the commit</th><th class="nowrap">Excluded (by the owner's ignore rules)</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>All 8 source files · <code>README.md</code> (recreated) · <code>USER_GUIDE.html</code> · <code>icon.png</code> · the 3 recovery notes · the 4 screenshots · updated <code>.gitignore</code> · the <code>example.png</code> deletion</td>
+      <td>VOD media (<code>*.mp4</code>, <code>*.json</code> — 3–44&nbsp;GB files that belong on the NAS, not in git) · <code>folders.json</code> (machine-local config, matched by <code>*.json</code>) · <code>DEVELOPMENT_SUMMARY.html</code> · <code>.claude/</code> · <code>__pycache__/</code></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>Working tree after the commit: clean. Every line of application code, both restored documents that the owner chose to track, and all recovery evidence are now inside git's object database, where a rebase gone wrong is recoverable via <code>git reflog</code> rather than via heroics.</p>
+
+<!-- ============================================================ -->
+<h2 id="lessons">9. Why this worked — lessons &amp; recommendations</h2>
+
+<h3>What made recovery cheap</h3>
+<ul>
+  <li><strong>Live session context as ground truth.</strong> The recovery ran inside a continuation of the build session, so byte-exact originals were available to audit against. That converted a "rebuild the project" request into a "verify and patch one file" task. Corollary: when a loss is discovered, attempt recovery <em>in the same session/context that built the work</em> if it still exists — it is the highest-fidelity source there is.</li>
+  <li><strong>Documentation written for exactly this scenario.</strong> <code>DEVELOPMENT_SUMMARY.html</code> records every decision, defect, API shape, and data-format rule; <code>USER_GUIDE.html</code> records every behaviour. Together they made an independent cross-check now, and a genuine rebuild path if context had been gone.</li>
+  <li><strong>Deterministic, dependency-free code.</strong> A zero-dependency stdlib server and vanilla frontend have no lockfiles, build outputs, or node_modules to lose or reproduce — the working tree <em>is</em> the whole project. Small surface, small recovery.</li>
+  <li><strong>State that matters lived outside the blast radius.</strong> The media on the NAS, the chat data in self-contained JSONs, watch positions in browser <code>localStorage</code>, the NAS config in an ignored file — none of it was in git, so none of it could be destroyed by git. The resume-at-10:00:55 moment during verification was this principle demonstrating itself.</li>
+  <li><strong>Layered verification with a runtime gate.</strong> Line counts and markers are fast filters, but the claim "the recovery is good" was only made after the running app passed the same suite as the original. The four screenshots then corroborated independently that the owner had already run this exact code successfully.</li>
+</ul>
+
+<h3>Recommendations</h3>
+<ol>
+  <li><strong>Add a remote and push.</strong> <span class="pill p-warn">open</span> — The repository still has no remote. A pushed copy turns any local git accident, disk failure, or bad rebase into a non-event. This is the single highest-value follow-up:
+<pre><code>git remote add origin &lt;your GitHub repo URL&gt;
+git push -u origin main</code></pre></li>
+  <li><strong>Commit at milestones, not at the end.</strong> The original session produced ~3,000 verified lines across six phases with zero commits — every phase boundary (server proven with curl, frontend working, NAS support landing) was a natural commit point that would have bounded this incident to a fraction of the exposure.</li>
+  <li><strong>Prefer <code>git rebase</code> on pushed-or-committed work only</strong>, and remember <code>git reflog</code> — committed work is very hard to truly destroy; untracked work is trivially easy.</li>
+  <li><strong>Keep the docs current.</strong> They are this project's rebuild insurance; a future change that lands in code but not in <code>DEVELOPMENT_SUMMARY.html</code> quietly erodes that policy.</li>
+  <li><strong>Back up what git can't protect</strong> — the VOD media and chat JSONs exist only on the NAS and local disk; git ignores them by design. NAS snapshots/RAID are the right tool there.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="residual">10. Residual gaps</h2>
+
+<ul>
+  <li><strong>None functional.</strong> The app serves, plays, seeks, syncs chat, streams from the NAS, and manages folders exactly as before the incident; nothing on the original verification checklist regressed.</li>
+  <li><strong><code>example.png</code> and the chat-render MP4 are gone for good</strong> — both accepted losses with their reasoning recorded in <a href="#findings">§5</a>.</li>
+  <li><strong>Mid-session git history is unrecoverable</strong> — accepted; the narrative lives in the documentation instead.</li>
+  <li><strong>This report and <code>DEVELOPMENT_SUMMARY.html</code> are currently untracked/ignored respectively</strong> — whether to track them is the owner's call via <code>.gitignore</code>, consistent with how they've chosen to handle each document so far.</li>
+  <li><strong>No remote yet</strong> — see recommendation #1. Until a push happens, the protective commit protects against git mistakes but not against disk loss.</li>
+</ul>
+
+<footer>
+  TwitchSync rebase recovery report · session of 8 August 2026 · self-contained, opens directly from the project folder.<br>
+  Companions: <code>DEVELOPMENT_SUMMARY.html</code> (original build record) · <code>USER_GUIDE.html</code> (end-user manual) · <code>README.md</code> (quick start).
+</footer>
+
+</main>
+</body>
+</html>
