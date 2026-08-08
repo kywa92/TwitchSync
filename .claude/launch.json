@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "twitchsync",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["server.py", "--no-open"],
+      "port": 8710
+    }
+  ]
+}

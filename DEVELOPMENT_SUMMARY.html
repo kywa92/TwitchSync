@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TwitchSync — Development Summary</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%239147ff'/%3E%3Cpath d='M9 7l8 5-8 5z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f6f6f8; --panel-2: #ededf1; --border: #d9d9e0;
+    --text: #1f1f23; --text-dim: #56565f; --text-faint: #85858f;
+    --accent: #7b2ff2; --code-bg: #f0f0f4; --kbd-bg: #ffffff;
+    --ok: #1a7f4b; --ok-bg: #eaf7f0; --ok-border: #a8dcc0;
+    --warn: #9a6410; --warn-bg: #fff4e8; --warn-border: #f0c48e;
+    --bad: #b3261e; --bad-bg: #fdecea; --bad-border: #f2b8b5;
+    --info-bg: #f3ecff; --info-border: #c9aef7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e0e10; --panel: #18181b; --panel-2: #1f1f23; --border: #2f2f35;
+      --text: #efeff1; --text-dim: #adadb8; --text-faint: #7d7d88;
+      --accent: #a970ff; --code-bg: #1f1f23; --kbd-bg: #26262c;
+      --ok: #5fd28a; --ok-bg: #10241a; --ok-border: #2c5c40;
+      --warn: #f0a04b; --warn-bg: #2b2113; --warn-border: #6e5426;
+      --bad: #ff8080; --bad-bg: #2b1517; --bad-border: #6e2f2f;
+      --info-bg: #1d1531; --info-border: #4c3a78;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 940px; margin: 0 auto; padding: 40px 28px 120px; }
+
+  /* header */
+  .doc-badge { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: .4px; color: var(--accent); }
+  .doc-badge svg { width: 26px; height: 26px; }
+  h1 { font-size: 40px; line-height: 1.12; letter-spacing: -0.8px; margin: 10px 0 8px; }
+  .subtitle { color: var(--text-dim); font-size: 18px; margin: 0 0 20px; max-width: 46em; }
+  .meta-line { color: var(--text-faint); font-size: 13.5px; border-top: 1px solid var(--border); padding-top: 14px; }
+
+  h2 { font-size: 25px; letter-spacing: -0.4px; margin: 60px 0 14px; padding-bottom: 8px; border-bottom: 2px solid var(--border); scroll-margin-top: 20px; }
+  h3 { font-size: 19px; margin: 32px 0 8px; scroll-margin-top: 20px; }
+  h4 { font-size: 15.5px; margin: 20px 0 6px; }
+  p { margin: 10px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 26px; } li { margin: 5px 0; }
+  strong { font-weight: 650; }
+
+  code { font: 0.87em/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; overflow-wrap: anywhere; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; overflow-x: auto; }
+  pre code { background: none; border: none; padding: 0; font-size: 13.5px; }
+  kbd { display:inline-block; font:600 12.5px/1 ui-monospace,Menlo,monospace; background:var(--kbd-bg);
+    border:1px solid var(--border); border-bottom-width:2.5px; border-radius:6px; padding:4px 7px; }
+
+  .table-wrap { overflow-x: auto; margin: 14px 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--panel); font-weight: 650; }
+  td.nowrap, th.nowrap { white-space: nowrap; }
+  tbody tr:nth-child(even) { background: color-mix(in srgb, var(--panel) 45%, transparent); }
+
+  /* TOC */
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px 26px; margin: 28px 0; }
+  .toc h2 { border: none; margin: 0 0 10px; padding: 0; font-size: 17px; }
+  .toc ol { columns: 2; column-gap: 40px; margin: 0; padding-left: 22px; font-size: 15px; }
+  .toc li { margin: 4px 0; break-inside: avoid; }
+  @media (max-width: 680px) { .toc ol { columns: 1; } }
+
+  /* stat grid */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 22px 0; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat .n { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; display: block; }
+  .stat .l { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; display: block; }
+
+  /* callouts */
+  .callout { border-radius: 10px; border: 1px solid; padding: 12px 16px; margin: 16px 0; font-size: 15px; }
+  .callout p { margin: 6px 0; }
+  .callout .label { font-weight: 700; letter-spacing: .3px; font-size: 12.5px; text-transform: uppercase; }
+  .c-info { background: var(--info-bg); border-color: var(--info-border); } .c-info .label { color: var(--accent); }
+  .c-warn { background: var(--warn-bg); border-color: var(--warn-border); } .c-warn .label { color: var(--warn); }
+  .c-ok   { background: var(--ok-bg);   border-color: var(--ok-border); }   .c-ok .label   { color: var(--ok); }
+
+  /* record cards (ADR / bug) */
+  .rec { border: 1px solid var(--border); border-radius: 12px; padding: 0; margin: 18px 0; overflow: hidden; }
+  .rec > header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 11px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .rec > header .id { font: 700 12px/1 ui-monospace, Menlo, monospace; color: var(--accent); letter-spacing: .5px; }
+  .rec > header .t { font-weight: 650; font-size: 16px; flex: 1; min-width: 220px; }
+  .rec .body { padding: 4px 18px 16px; }
+  .rec dl { margin: 0; }
+  .rec dt { font-size: 11.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--text-faint); margin-top: 14px; }
+  .rec dd { margin: 3px 0 0; }
+  .pill { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; border: 1px solid; white-space: nowrap; }
+  .p-bad { color: var(--bad); border-color: var(--bad-border); background: var(--bad-bg); }
+  .p-warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-bg); }
+  .p-ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-bg); }
+  .p-dim { color: var(--text-dim); border-color: var(--border); background: var(--panel-2); }
+
+  /* timeline */
+  .tl { list-style: none; padding: 0; margin: 18px 0; }
+  .tl > li { position: relative; padding: 0 0 22px 28px; border-left: 2px solid var(--border); }
+  .tl > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .tl > li::before { content: ""; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  .tl h3 { margin: 0 0 4px; font-size: 17px; }
+  .tl .phase-meta { color: var(--text-faint); font-size: 12.5px; margin: 0 0 6px; }
+
+  .file-tree { font: 13.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  footer { margin-top: 70px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <span class="doc-badge">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5" fill="#9147ff"/><path d="M9 7l8 5-8 5z" fill="#fff"/></svg>
+    TWITCHSYNC
+  </span>
+  <h1>Development Summary</h1>
+  <p class="subtitle">Complete record of a single build session: what was created, what was discovered about the data, every design decision and why it was made, every defect found and fixed, and how each claim was verified.</p>
+  <p class="meta-line">
+    <strong>Session date:</strong> 8 August 2026 &nbsp;·&nbsp;
+    <strong>Repository:</strong> <code>/Users/kylanwalters/Documents/GitHub/TwitchSync</code> &nbsp;·&nbsp;
+    <strong>Starting state:</strong> empty repo (one commit, README stub, media files) &nbsp;·&nbsp;
+    <strong>Audience:</strong> human and AI developers picking this project up
+  </p>
+</header>
+
+<div class="stats">
+  <div class="stat"><span class="n">3,067</span><span class="l">lines written (source + docs)</span></div>
+  <div class="stat"><span class="n">8</span><span class="l">source files created</span></div>
+  <div class="stat"><span class="n">0</span><span class="l">third-party dependencies</span></div>
+  <div class="stat"><span class="n">16</span><span class="l">design decisions recorded</span></div>
+  <div class="stat"><span class="n">5</span><span class="l">defects found &amp; fixed</span></div>
+  <div class="stat"><span class="n">1</span><span class="l">subagent invoked</span></div>
+</div>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#brief">Original brief &amp; interpretation</a></li>
+    <li><a href="#timeline">Session timeline</a></li>
+    <li><a href="#groundtruth">Investigation: verified ground truth</a></li>
+    <li><a href="#agents">Agent-performed work</a></li>
+    <li><a href="#architecture">Architecture as built</a></li>
+    <li><a href="#decisions">Design decisions (ADR-01 … ADR-16)</a></li>
+    <li><a href="#defects">Defects found &amp; fixed</a></li>
+    <li><a href="#nonissues">Investigated and cleared (non-defects)</a></li>
+    <li><a href="#verification">Verification log</a></li>
+    <li><a href="#performance">Measured performance</a></li>
+    <li><a href="#security">Security model</a></li>
+    <li><a href="#inventory">File inventory</a></li>
+    <li><a href="#limitations">Known limitations &amp; future work</a></li>
+    <li><a href="#api">Appendix A — HTTP API reference</a></li>
+    <li><a href="#dataformat">Appendix B — chat JSON format notes</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="brief">1. Original brief &amp; interpretation</h2>
+
+<p>The user's opening request, paraphrased faithfully:</p>
+
+<blockquote style="border-left:3px solid var(--border); margin:14px 0; padding:6px 0 6px 18px; color:var(--text-dim)">
+A locally hosted web app that plays two videos side by side in one browser window. Both are pulled from Twitch and stored locally: a large main gameplay video, and a narrow column of chat history <em>in video form</em> to its right. Player controls at the bottom of the page should scrub <em>both</em> videos together, so the chat always matches the moment of gameplay being watched. The purpose is to avoid re-encoding the two together into one file. A chat history in JSON was also supplied, "if that would be a better way of tackling this project."
+</blockquote>
+
+<p>Two things about this brief shaped everything that followed:</p>
+
+<ol>
+  <li><strong>The stated goal was synchronised chat, not literally "play two videos."</strong> Playing two videos was the user's proposed <em>mechanism</em>; the actual requirement was "whatever part of the main video I'm watching, I should see the chat for a relevant time on the right." The user explicitly opened the door to the JSON alternative. That made the chat-source question a genuine fork worth asking about rather than assuming — see <a href="#adr-01">ADR-01</a>.</li>
+  <li><strong>The anti-goal was explicit:</strong> avoid re-encoding. Any design that required a preprocessing/transcode pass would have defeated the project's purpose, which ruled out several otherwise-attractive options (e.g. pre-rendering chat to frames, remuxing, generating a sprite sheet of chat images).</li>
+</ol>
+
+<p>Two clarifying questions were put to the user before any code was written, each with a recommendation:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Question</th><th>Options offered</th><th class="nowrap">User's choice</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="nowrap">Chat source</td>
+      <td>(a) Render chat from the JSON as real HTML <em>(recommended)</em>; (b) play <code>CHAT.mp4</code> beside the video with a JS sync loop; (c) build both with a toggle</td>
+      <td class="nowrap">(a) Render from JSON</td>
+    </tr>
+    <tr>
+      <td class="nowrap">Scope</td>
+      <td>(a) Library picker that auto-pairs any VODs in the folder <em>(recommended)</em>; (b) hardcode this single VOD</td>
+      <td class="nowrap">(a) Library picker</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>The rationale offered for (a) in the first question — and the reason it was recommended — is recorded in <a href="#adr-01">ADR-01</a>. The second choice proved important later: because the app was already a multi-VOD library rather than a single hardcoded file, adding NAS support in the final phase was an extension of an existing concept rather than a rewrite.</p>
+
+<!-- ============================================================ -->
+<h2 id="timeline">2. Session timeline</h2>
+
+<p>Six phases. Phases 1–3 were the original build; phases 4–6 were follow-up requests from the user, each of which is a self-contained unit of work.</p>
+
+<ol class="tl">
+  <li>
+    <h3>Phase 1 — Investigation and planning (plan mode)</h3>
+    <p class="phase-meta">Direct inspection of media + one Plan subagent · output: approved implementation plan</p>
+    <p>Probed the two MP4s with <code>ffprobe</code>, mapped their atom layout, parsed the 90 MB chat JSON structure, and checked what runtimes the machine had. Asked the user the two scoping questions above. Dispatched a Plan subagent with the verified facts to produce a detailed implementation design (see <a href="#agents">§4</a>). Wrote the final plan to <code>~/.claude/plans/this-is-a-new-jaunty-lagoon.md</code> and obtained approval before touching the repo.</p>
+  </li>
+  <li>
+    <h3>Phase 2 — Core implementation</h3>
+    <p class="phase-meta">Created <code>server.py</code> + <code>static/</code> (7 files) · verified with curl and browser automation</p>
+    <p>Built the stdlib-only backend first and proved it with curl before writing any frontend — Range semantics being the load-bearing piece, it was cheaper to validate in isolation. Then the single-page frontend: library picker, player with custom control bar, and the chat rendering/sync engine. Three defects were found and fixed during browser verification (<a href="#defects">§7</a>).</p>
+  </li>
+  <li>
+    <h3>Phase 3 — User documentation</h3>
+    <p class="phase-meta">Created <code>USER_GUIDE.html</code> (752 lines, self-contained)</p>
+    <p>A 16-section end-user manual with two custom diagrams (a CSS mock of the player layout and an inline-SVG anatomy of the seek bar), theme-aware, no external resources so it opens straight from Finder.</p>
+  </li>
+  <li>
+    <h3>Phase 4 — Offline-capability audit (user question)</h3>
+    <p class="phase-meta">No code changes · investigation and evidence only</p>
+    <p>The user asked whether chat emotes/badges are fetched from the internet at playback time, because they need the app to work with no connectivity. Answered with static analysis plus live runtime evidence (<a href="#verification">§9</a>). Conclusion: everything is embedded in the JSON; the app makes zero external requests.</p>
+  </li>
+  <li>
+    <h3>Phase 5 — Project logo in the header</h3>
+    <p class="phase-meta">Added <code>/icon.png</code> route + header layout</p>
+    <p>Wired the user-supplied <code>icon.png</code> into the library header. Included a small investigation of a console error that turned out to be unrelated (<a href="#nonissues">§8</a>).</p>
+  </li>
+  <li>
+    <h3>Phase 6 — Multi-folder / NAS library support</h3>
+    <p class="phase-meta">Rewrote the library layer · new folder-manager UI · 2 further defects fixed</p>
+    <p>The largest single change after the initial build. The user asked to point the app at a NAS while keeping the drop-in-project-folder behaviour. Their Synology was already SMB-mounted, so this was implemented as multi-root filesystem scanning rather than any network protocol work. Testing against their real 36-VOD NAS library immediately exposed two latent defects (<a href="#bug-04">BUG-04</a>, <a href="#bug-05">BUG-05</a>).</p>
+  </li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="groundtruth">3. Investigation: verified ground truth</h2>
+
+<p>Every significant design choice in this project traces back to a measured fact rather than an assumption. These were established by direct inspection before or during implementation. <strong>Future maintainers should re-verify these if the data source changes</strong> (a TwitchDownloader version bump, a different streamer's VOD, a different download configuration).</p>
+
+<h3>3.1 Media files</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th>Main VOD</th><th>Chat render</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap">Size</td><td>23,931,038,951 B (23.9 GB)</td><td>3,571,089,779 B (3.57 GB)</td></tr>
+    <tr><td class="nowrap">Video</td><td>H.264 High, 1920×1080, 60 fps, yuv420p</td><td>H.264 High, 700×2400, 60 fps</td></tr>
+    <tr><td class="nowrap">Audio</td><td>AAC-LC</td><td>none</td></tr>
+    <tr><td class="nowrap">Duration</td><td>24,446.33 s (6 h 47 m 26 s)</td><td>24,446.00 s</td></tr>
+    <tr><td class="nowrap">Atom order</td><td><code>ftyp → mdat → moov</code></td><td><code>ftyp → free → mdat → moov</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="callout c-warn"><span class="label">Critical finding</span><br>
+<strong>The <code>moov</code> atom sits at the end of the file</strong> (offset 23,876,268,717 of 23,931,038,951). These files are not "faststart". A browser therefore <em>cannot play them at all</em> without HTTP Range support: it must fetch the tail to read the index before decoding a single frame, then request arbitrary interior byte ranges for every seek. Python's <code>http.server</code> has no Range support — verified by source inspection. This single fact made a hand-written Range implementation non-optional (<a href="#adr-03">ADR-03</a>).</p>
+
+<h3>3.2 Chat JSON (TwitchDownloader format)</h3>
+
+<p>90,203,912 bytes. Top-level key order is stable and significant: <code>FileInfo → streamer → clipper → video → comments → embeddedData</code>.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Fact</th><th>Value</th><th>Why it mattered</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap">Comment count</td><td>20,514</td><td>Too many to hold in the DOM at once → windowing (<a href="#adr-06">ADR-06</a>)</td></tr>
+    <tr><td class="nowrap">Offset range</td><td>33 s → 24,459 s</td><td>Sorted ascending → binary search is valid. <strong>Last offset exceeds video duration by 13 s</strong> → must clamp when bucketing</td></tr>
+    <tr><td class="nowrap">Metadata position</td><td><code>streamer</code> + <code>video</code> complete within first ~750 B</td><td>Library listing can head-parse 64 KB instead of loading 90 MB (<a href="#adr-04">ADR-04</a>)</td></tr>
+    <tr><td class="nowrap">Comments payload</td><td>~15 MB of the 90 MB</td><td>Parse is fast; the bulk is images</td></tr>
+    <tr><td class="nowrap">Embedded images</td><td>843 emotes + 234 badges = 1,077 images, 70.5 MB base64 (~52.9 MB binary)</td><td>78% of the file. Decode once per session to Blob URLs (<a href="#adr-07">ADR-07</a>)</td></tr>
+    <tr><td class="nowrap">Image formats</td><td>firstParty: 248 PNG + 116 GIF · thirdParty: 27 PNG + 26 GIF + 426 WebP · badges: 234 PNG</td><td><strong>Not all PNG.</strong> MIME must be sniffed per asset or animated emotes break</td></tr>
+    <tr><td class="nowrap">Declared dimensions</td><td>logical CSS size; actual bitmap is <code>width × imageScale</code> (e.g. declared 28×28 @ scale 2 → 56×56 stored)</td><td>Render at declared size, not natural size, or every emote is 2× too large</td></tr>
+    <tr><td class="nowrap">Badge image field</td><td><code>twitchBadges[i].versions[ver].bytes</code>, keyed <code>name/version</code></td><td>Not the obvious <code>data</code> field used by emotes</td></tr>
+    <tr><td class="nowrap">Missing user colours</td><td>1,820 comments have no <code>user_color</code></td><td>Deterministic fallback is mandatory, not theoretical (<a href="#adr-15">ADR-15</a> neighbourhood)</td></tr>
+    <tr><td class="nowrap">Zero-width emotes</td><td>9 present (e.g. <code>RainTime</code>, <code>SPEED</code>)</td><td>Must overlay the preceding emote to look like Twitch</td></tr>
+    <tr><td class="nowrap">Bits usage</td><td>1 comment with <code>bits_spent &gt; 0</code></td><td>Cheermote rendering deprioritised to plain-text fallback</td></tr>
+    <tr><td class="nowrap">Emote resolution</td><td>3,735 first-party emote uses, <strong>0 unresolvable</strong></td><td>Proves the file is self-sufficient offline</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>3.3 Environment</h3>
+<ul>
+  <li><strong>Python 3.14.2</strong> present; <strong>Node.js absent</strong>. This decided the stack outright (<a href="#adr-02">ADR-02</a>) — a Node/Vite frontend was not an option without asking the user to install a toolchain, which the brief did not invite.</li>
+  <li><code>ffmpeg</code>/<code>ffprobe</code> 8.1.2 available — used for <em>investigation only</em>. Deliberately not used at runtime: shelling out to ffprobe per VOD would make the library listing slow and add a hard dependency (<a href="#adr-04">ADR-04</a>).</li>
+  <li>macOS (Darwin 25.6.0). Relevant in phase 6: NAS shares appear as ordinary filesystem paths under <code>/Volumes/</code>.</li>
+</ul>
+
+<h3>3.4 NAS environment (discovered in phase 6)</h3>
+<ul>
+  <li>Share already mounted: <code>//kylan@syn1821._smb._tcp.local/SHARE1821</code> → <code>/Volumes/SHARE1821</code> (smbfs). <strong>This is why no SMB client code was needed</strong> — see <a href="#adr-09">ADR-09</a>.</li>
+  <li><code>/Volumes/SHARE1821/VODs</code> contains 36 valid VOD pairs, plus a nested <code>snowboard day/</code> subfolder containing more.</li>
+  <li><strong>Extension casing is inconsistent in the real library: 31 files use <code>.Json</code> (capital J) versus 24 using <code>.json</code>.</strong> This directly exposed <a href="#bug-04">BUG-04</a>.</li>
+  <li>Synology housekeeping directories present: <code>#recycle</code> (contains deleted VODs — must not be listed), <code>@eaDir</code>, <code>#snapshot</code>.</li>
+  <li>The project folder's VOD is a duplicate of one on the NAS (identical byte size), which forced the ID scheme to disambiguate copies (<a href="#adr-10">ADR-10</a>).</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="agents">4. Agent-performed work</h2>
+
+<p>Exactly <strong>one subagent</strong> was invoked in this session. This section is deliberately precise about what it did, because "an agent wrote it" is not a useful provenance record.</p>
+
+<div class="rec">
+  <header>
+    <span class="id">AGENT-01</span>
+    <span class="t">Plan agent — implementation design</span>
+    <span class="pill p-ok">adopted</span>
+  </header>
+  <div class="body">
+    <dl>
+      <dt>Type &amp; mode</dt>
+      <dd><code>subagent_type: Plan</code>, run synchronously (<code>run_in_background: false</code>) because the result gated all subsequent work.</dd>
+
+      <dt>Input brief</dt>
+      <dd>A ~1,200-word prompt containing: the confirmed product decisions (JSON chat rendering, library picker) marked <em>do not revisit</em>; every verified fact from <a href="#groundtruth">§3.1–3.3</a>; the hard constraints (stdlib only, no build step); and an explicit list of known pitfalls to design around (no Range support in stdlib, 90 MB parse in the browser, aborted-request traceback spam, DOM capping, path traversal). Supplying verified facts rather than asking the agent to rediscover them kept its output grounded and avoided duplicate exploration cost.</dd>
+
+      <dt>Output</dt>
+      <dd>A complete implementation plan: file layout with per-file responsibilities, the server routing table, the chat rendering pipeline step by step, the sync/seek algorithm, seek-bar interaction model with justification, CSS grid layout, an edge-case matrix, a build order, and a 20-item manual verification checklist.</dd>
+
+      <dt>Independent findings (value added beyond the brief)</dt>
+      <dd>The agent re-verified the data itself and <strong>corrected three of my stated assumptions</strong>, each of which would have produced visible bugs:
+        <ol>
+          <li>Embedded images are <em>not</em> all PNG — they are a PNG/GIF/WebP mix, so MIME must be sniffed per asset (animated emotes would otherwise have failed to render).</li>
+          <li>Declared <code>width</code>/<code>height</code> are the logical CSS size while the stored bitmap is <code>× imageScale</code> — rendering at natural size would have made every emote double-size.</li>
+          <li>Badge image data lives under <code>versions[ver].bytes</code>, not a <code>data</code> field.</li>
+        </ol>
+        It also quantified that 1,820 comments lack <code>user_color</code>, upgrading the colour-hash fallback from "nice to have" to mandatory.</dd>
+
+      <dt>How much was adopted</dt>
+      <dd>Substantially all of it. The implemented file layout, routing table, chat pipeline, sync engine, seek model, and CSS grid match the plan. Its verification checklist was executed against the running app.</dd>
+
+      <dt>Where implementation diverged</dt>
+      <dd>
+        <ul>
+          <li>The agent proposed a <code>--dir</code>-only single library root; phase 6 replaced this with multi-root scanning (not a correction — a later requirement it was never given).</li>
+          <li>Its <code>ThreadingHTTPServer</code> traceback-hygiene advice covered the stream loop and <code>finish()</code>; in practice a third site was needed (<code>handle()</code>) — see <a href="#bug-02">BUG-02</a>.</li>
+          <li>Chapter tick marks on the seek bar were listed as an optional stretch item and were not built.</li>
+          <li>It suggested a single <code>app.js</code> as an alternative but justified ES modules; modules were used.</li>
+        </ul>
+      </dd>
+    </dl>
+  </div>
+</div>
+
+<h4>Agents deliberately <em>not</em> used</h4>
+<p>No <code>Explore</code> agents were dispatched. The plan-mode workflow offers them for codebase reconnaissance, but this repository was empty — there was no existing code to search. Direct <code>ffprobe</code>/<code>Read</code>/Python inspection of the media files was both cheaper and more precise than delegating. Likewise no agents were used in phases 2–6: that work was iterative build-and-verify against a running server, where delegation would have added context-transfer overhead without parallelism benefit.</p>
+
+<!-- ============================================================ -->
+<h2 id="architecture">5. Architecture as built</h2>
+
+<pre class="file-tree"><code>TwitchSync/
+├── server.py              598 lines · entire backend, Python stdlib only
+├── icon.png               project logo, served at /icon.png
+├── folders.json           generated at runtime: user's added library folders
+└── static/
+    ├── index.html         118 · single page, both views, inline SVG icons
+    ├── style.css          307 · dark theme, CSS grid layout
+    └── js/                        (native ES modules, no build step)
+        ├── main.js        125 · bootstrap, ?v= routing, open/close lifecycle
+        ├── library.js     149 · VOD picker + folder-manager UI
+        ├── player.js      493 · video, controls, seek bar, fullscreen, resume
+        ├── chat.js        351 · chat load, asset decode, render, sync engine
+        └── util.js         92 · fmtTime, colorHash, upperBound, MIME sniff, ls*</code></pre>
+
+<h3>5.1 Backend responsibilities (<code>server.py</code>)</h3>
+<ul>
+  <li><strong><code>Library</code> class</strong> — owns the set of library roots (one permanent + N user-added, persisted to <code>folders.json</code>), recursive pairing scan, head-metadata caching, and ID→path resolution. All mutating and scanning operations are guarded by a single <code>threading.Lock</code>.</li>
+  <li><strong><code>Handler</code></strong> — routing, Range/206 streaming, static serving, JSON API, POST body validation, and log hygiene.</li>
+  <li><strong>Module-level log worker</strong> — a daemon thread draining a bounded queue (<a href="#adr-14">ADR-14</a>).</li>
+  <li><strong><code>ThreadingHTTPServer</code></strong> bound to <code>127.0.0.1</code>, <code>HTTP/1.1</code> keep-alive (safe: every response sets <code>Content-Length</code>).</li>
+</ul>
+
+<h3>5.2 Chat engine data flow (<code>chat.js</code>)</h3>
+<pre><code>fetch /chat?v=&lt;id&gt;  ──stream w/ progress──▶  Blob → text → JSON.parse
+                                                      │
+        ┌─────────────────────────────────────────────┴──────────────┐
+        ▼                                                            ▼
+  asset maps (once)                                          comment index
+  • firstParty  Map(emoticon_id → {url,w,h})                  • Float64Array of offsets
+  • thirdParty  Map(name → {url,w,h,zw})                       • Uint32Array msgs/minute
+  • badges      Map("name/version" → {url,title})                (95th-pct scaled)
+  base64 → sniff MIME → Blob → createObjectURL                       │
+        │                                                            ▼
+        └──────────────────────▶ render(comment) ◀────── cursor advanced by
+                                                          video 'timeupdate'
+                                 seek → upperBound(times, t)
+                                      → rebuild + 50-message backfill</code></pre>
+
+<p>The engine holds two invariants worth preserving in any future edit: <strong>(1)</strong> <code>cursor</code> is always the index of the next comment not yet appended, and <strong>(2)</strong> the DOM contains a contiguous suffix of comments ending at <code>cursor - 1</code>. Every operation (tick, seek-rebuild, trim) preserves both.</p>
+
+<!-- ============================================================ -->
+<h2 id="decisions">6. Design decisions</h2>
+
+<p>Sixteen decisions with material consequences. Format: context → decision → rationale → consequences.</p>
+
+<div class="rec" id="adr-01">
+  <header><span class="id">ADR-01</span><span class="t">Render chat from JSON rather than playing the chat video</span><span class="pill p-dim">user-approved</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>The brief proposed playing <code>CHAT.mp4</code> beside the gameplay video, kept aligned by a JavaScript sync loop. A chat JSON was also available.</dd>
+    <dt>Decision</dt><dd>Render chat as live HTML from the JSON, driven by the video's clock. The chat videos are ignored entirely.</dd>
+    <dt>Rationale</dt><dd>Browsers cannot hard-lock two <code>&lt;video&gt;</code> elements. Any two-video approach needs a correction loop that periodically re-seeks the laggard, which produces visible hitches; after a scrub both elements re-buffer independently; and the 700×2400 chat video would be downscaled into a ~380 px column, softening text. Rendering from JSON makes sync <em>exact by construction</em> — there is no second clock to drift — and yields sharp, selectable text, lower CPU, instant seek response, and a free chat-activity histogram. It also makes the 3.57 GB chat renders deletable.</dd>
+    <dt>Consequences</dt><dd>Required implementing Twitch's rendering semantics by hand (emote matching, zero-width overlays, badge lookup, colour fallback). Adds a one-time per-VOD cost: fetching and parsing a large JSON. Accepted deliberately; see <a href="#limitations">§13</a> for the caching option not taken.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-02">
+  <header><span class="id">ADR-02</span><span class="t">Python stdlib backend, zero-build vanilla frontend</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>Node.js is not installed on the machine; Python 3.14.2 is.</dd>
+    <dt>Decision</dt><dd>Backend uses only the Python standard library. Frontend is hand-written HTML/CSS plus native ES modules — no bundler, no transpiler, no package manager.</dd>
+    <dt>Rationale</dt><dd>The app must start with one command on a machine the user already has. Introducing a toolchain would add an install step, a lockfile, a build step before every run, and a supply chain — all for a single-user local player. ES modules are served over HTTP here, so they work natively without a bundler.</dd>
+    <dt>Consequences</dt><dd>Things a framework would provide (reactive rendering, routing) are written by hand — roughly 1,200 lines of frontend. In exchange there is nothing to update, nothing to audit, and the app will still run unchanged years from now.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-03">
+  <header><span class="id">ADR-03</span><span class="t">Hand-implement HTTP Range semantics</span><span class="pill p-bad">load-bearing</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd><code>moov</code> at EOF (<a href="#groundtruth">§3.1</a>) + no Range support in <code>http.server</code>.</dd>
+    <dt>Decision</dt><dd>Full single-range support: <code>bytes=start-end</code>, <code>start-</code>, and <code>-suffix</code> forms; <code>206</code> with <code>Content-Range</code>; <code>416</code> + <code>Content-Range: bytes */size</code> for unsatisfiable; malformed headers fall back to <code>200</code> full-body per RFC; 1 MiB streaming chunks. Multi-range requests are served as their first part only.</dd>
+    <dt>Rationale</dt><dd>Without this, playback does not work at all — not "is slow," but cannot start. Suffix ranges specifically matter because the browser's very first request after <code>Content-Length</code> discovery is for the file tail to locate <code>moov</code>. Multi-range was skipped because no browser issues it for media playback; serving the first part is a legal, safe degradation.</dd>
+    <dt>Consequences</dt><dd>~45 lines of well-tested code. Enables instant seeking across a 43.7 GB file and means the client only ever transfers what it watches.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-04">
+  <header><span class="id">ADR-04</span><span class="t">Head-parse 64 KB for library metadata instead of reading the whole JSON or calling ffprobe</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>The library card shows real stream title, streamer, game, and duration. Those live in the chat JSON (90 MB each) or could come from ffprobe.</dd>
+    <dt>Decision</dt><dd>Read the first 64 KB of each chat JSON, locate the <code>"streamer"</code> and <code>"video"</code> keys, and parse just those objects with <code>json.JSONDecoder().raw_decode()</code>, which parses one value and ignores the truncated remainder. Cache per <code>(path, size, mtime)</code>. On any failure, fall back to the filename.</dd>
+    <dt>Rationale</dt><dd>The metadata reliably appears within the first ~750 bytes, so 64 KB has ~85× headroom (enough for many chapters). Loading 90 MB × N files per library visit would make the picker unusable, especially over SMB; shelling out to ffprobe would add a hard external dependency and process-spawn latency per VOD. This approach costs one small read per file, once, then nothing.</dd>
+    <dt>Consequences</dt><dd>Measured at 0.03 s per file over SMB. If TwitchDownloader ever moves <code>comments</code> before <code>video</code> in its output, this degrades gracefully to filename titles rather than breaking.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-05">
+  <header><span class="id">ADR-05</span><span class="t">Seek bar commits on pointer release, not during the drag</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>Dragging a scrubber conventionally seeks live for instant feedback.</dd>
+    <dt>Decision</dt><dd>During a drag, only the visuals move (fill, handle, tooltip, time readout). <code>video.currentTime</code> is assigned once, on <code>pointerup</code>. Keyboard seeks commit immediately.</dd>
+    <dt>Rationale</dt><dd>Each <code>currentTime</code> assignment on these files aborts in-flight range requests, opens new ones, and forces a backward keyframe hunt. Live-seeking a drag would fire dozens of those cycles per gesture — stuttering video, socket churn, and repeated chat rebuilds. Thumbnail previews (the usual reason to seek live) aren't available without a preprocessing pass, which <a href="#adr-01">the anti-goal</a> forbids, so the time tooltip conveys everything a live seek would.</dd>
+    <dt>Consequences</dt><dd>Scrubbing feels instant. Six rapid seeks in a row produced zero server errors and no stalls.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-06">
+  <header><span class="id">ADR-06</span><span class="t">Chat DOM is a bounded window, not the full log</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>20,514 messages per VOD; a 12-hour VOD has more.</dd>
+    <dt>Decision</dt><dd>Keep at most 200 message elements while pinned to the bottom; raise the cap to 500 while the user is reading scrollback; trim from the top. Seeks rebuild the window from a binary search with 50 messages of backfill.</dd>
+    <dt>Rationale</dt><dd>Rendering all messages would create tens of thousands of nodes and thousands of images — slow and memory-hungry for content that is off-screen anyway. The raised cap during scrollback exists because trimming from the top while the user reads would shift content under them; the trim is deferred until they re-pin, and when trimming does occur while unpinned, <code>scrollTop</code> is compensated by the removed height so the view never jumps.</dd>
+    <dt>Consequences</dt><dd>Constant-cost chat regardless of VOD length. Old messages are not scrollable-to indefinitely — seek backward instead, which is the natural gesture anyway.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-07">
+  <header><span class="id">ADR-07</span><span class="t">Decode embedded images once into Blob URLs</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>1,077 images arrive base64-encoded inside the JSON. The same emote appears in hundreds of messages.</dd>
+    <dt>Decision</dt><dd>At load, decode each asset once (<code>atob</code> → <code>Uint8Array</code> → sniff magic bytes → <code>Blob</code> → <code>createObjectURL</code>), store the URL in a lookup map, and record every URL for revocation on teardown.</dd>
+    <dt>Rationale</dt><dd>Data URIs would re-decode the same base64 on every message render and bloat the DOM with megabyte-long attribute values. Blob URLs are cheap handles the browser can cache and animate natively — GIF and WebP emotes animate for free with no extra code. MIME sniffing (rather than assuming <code>image/png</code>) is required because the assets are a PNG/GIF/WebP mix.</dd>
+    <dt>Consequences</dt><dd>~950 decodes ≈ 53 MB, once per VOD open, under the loading overlay. Teardown must revoke them all or repeated open/close leaks memory — this is why <code>Chat.destroy()</code> exists and is called from <code>main.js</code>.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-08">
+  <header><span class="id">ADR-08</span><span class="t">Media paths resolve through an opaque key, never string-to-path math</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>The client asks for media by a <code>?v=</code> parameter. The naive design joins that onto a base directory.</dd>
+    <dt>Decision</dt><dd>The <code>v</code> value is only ever a dictionary key into the results of a directory scan. It is never joined, normalised, or otherwise treated as a path. A <code>realpath</code> containment check against the known roots is applied as a second, independent layer.</dd>
+    <dt>Rationale</dt><dd>Traversal bugs come from path arithmetic on untrusted input. If the value is a lookup key, <code>../../../etc/passwd</code> is simply a key that does not exist — there is no string to sanitise and no encoding trick to defeat. The containment check is defence in depth for the case where a scan somehow yields a symlinked path outside a root.</dd>
+    <dt>Consequences</dt><dd>Verified: traversal attempts return 404, and only files discovered as valid VOD pairs are ever served.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-09">
+  <header><span class="id">ADR-09</span><span class="t">NAS support via mounted filesystem paths, not an SMB client</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>The user asked to point the app at a NAS over 2.5 GbE.</dd>
+    <dt>Decision</dt><dd>Treat a NAS as an ordinary directory path (e.g. <code>/Volumes/SHARE1821/VODs</code>). The user mounts the share in Finder; the app just reads it. Mounted volumes are offered as clickable suggestions in the UI.</dd>
+    <dt>Rationale</dt><dd>Speaking SMB directly would require a third-party library (violating <a href="#adr-02">ADR-02</a>) <em>and</em> would mean the app handling NAS credentials — something it should never do. Finder already solves mounting properly, stores credentials in Keychain, and can auto-mount at login. Piggybacking on the OS mount is strictly better: less code, no secrets, and it works identically for external drives, SD cards, and any future storage.</dd>
+    <dt>Consequences</dt><dd>The user must mount before use; an unmounted share shows as <em>not mounted</em> and is skipped rather than erroring. The <code>/Volumes</code> suggestion list is macOS-specific — see <a href="#limitations">§13</a>.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-10">
+  <header><span class="id">ADR-10</span><span class="t">Composite VOD IDs, with a stem fallback for old links</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>Before phase 6 a VOD's ID was its filename stem. With multiple folders, the same stem can exist in several places — the user's project folder holds a byte-identical copy of a NAS VOD. Subfolders can also repeat stems within one root.</dd>
+    <dt>Decision</dt><dd>ID is <code>&lt;rootId&gt;:&lt;relative path without extension&gt;</code>, where <code>rootId</code> is the first 8 hex of SHA-1 of the root's realpath. Resolution tries an exact ID match first, then falls back to matching any VOD whose bare stem equals the value.</dd>
+    <dt>Rationale</dt><dd>The composite disambiguates duplicates deterministically and survives restarts (unlike an array index). The fallback preserves URLs bookmarked before the change — an old <code>?v=&lt;stem&gt;</code> link still resolves instead of 404ing, which matters because the user had been using the app for a day already.</dd>
+    <dt>Consequences</dt><dd>Renaming a folder changes its <code>rootId</code> and therefore its VOD IDs; bookmarks then fall back to stem matching, which still works. See <a href="#adr-15">ADR-15</a> for why saved playback positions were deliberately <em>not</em> keyed on this ID.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-11">
+  <header><span class="id">ADR-11</span><span class="t">Case-insensitive extension pairing</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>The real NAS library contains 31 <code>.Json</code> files and 24 <code>.json</code> files.</dd>
+    <dt>Decision</dt><dd>Within each directory, build a lowercase-name → actual-name map and look up <code>(stem + ".json").lower()</code>. The <code>.mp4</code> test and the <code>" - CHAT"</code> exclusion are likewise case-insensitive.</dd>
+    <dt>Rationale</dt><dd>TwitchDownloader has emitted more than one casing across versions. Python's <code>dict</code> lookup is case-sensitive even when the underlying filesystem is not, so the original exact-match pairing silently dropped over half the user's real library — a failure mode that produces no error, just missing entries.</dd>
+    <dt>Consequences</dt><dd>Fixed <a href="#bug-04">BUG-04</a>. Also future-proofs against <code>.JSON</code>.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-12">
+  <header><span class="id">ADR-12</span><span class="t">Recursive scan, depth-limited, with a skip list</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>The user's NAS keeps VODs both at the top level and in per-event subfolders. A share root also contains large unrelated trees and NAS system directories.</dd>
+    <dt>Decision</dt><dd>Walk each root up to 4 levels deep, pruning hidden directories (leading <code>.</code>) and a skip list: <code>@eaDir</code>, <code>#recycle</code>, <code>#snapshot</code>, <code>node_modules</code>, <code>__pycache__</code>.</dd>
+    <dt>Rationale</dt><dd>Non-recursive scanning would have missed real VODs; unbounded recursion over a multi-terabyte share would make every library visit slow. Four levels covers realistic organisation while bounding worst-case cost. <code>#recycle</code> is excluded specifically because it is the NAS trash — surfacing deleted VODs as playable would be actively misleading, and the user's recycle bin does contain old VODs.</dd>
+    <dt>Consequences</dt><dd>Measured 0.04 s to walk the user's NAS VOD tree. VODs nested deeper than 4 levels require adding their folder directly — documented in the guide's troubleshooting section.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-13">
+  <header><span class="id">ADR-13</span><span class="t">CSRF protection by requiring a JSON content type</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>Phase 6 introduced the first state-changing endpoint (<code>POST /api/folders</code>). Any website the user visits can issue cross-origin requests to <code>127.0.0.1</code>.</dd>
+    <dt>Decision</dt><dd>Require <code>Content-Type: application/json</code>; reject anything else with <code>415</code>. Never answer <code>OPTIONS</code>. Keep all read endpoints on <code>GET</code> with no side effects.</dd>
+    <dt>Rationale</dt><dd>A cross-origin <code>fetch</code> carrying a JSON content type is not a CORS "simple request", so the browser must preflight it with <code>OPTIONS</code>. Since the server never answers that preflight, the real request is never sent. Form-encoded posts (which <em>are</em> simple and would otherwise sail through) are rejected outright. This gets meaningful protection from a content-type check rather than token plumbing that would be overkill for a single-user local app.</dd>
+    <dt>Consequences</dt><dd>Verified: a form-content-type POST returns 415. A malicious page cannot add or remove library folders.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-14">
+  <header><span class="id">ADR-14</span><span class="t">Logging happens on a background thread with a bounded queue</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>Discovered the hard way — see <a href="#bug-05">BUG-05</a>. <code>BaseHTTPRequestHandler.send_response()</code> calls <code>log_request()</code> <em>before</em> writing the response, so a blocking log write blocks the response.</dd>
+    <dt>Decision</dt><dd>Handlers enqueue formatted log lines with <code>put_nowait</code> onto a 2,000-slot queue; a daemon thread drains it to stderr. If the queue is full, the line is dropped.</dd>
+    <dt>Rationale</dt><dd>If stderr is a pipe nobody drains, <code>write()</code> blocks once the pipe buffer fills. On a threaded server every logged request then hangs — and because handlers hold the library lock, unrelated requests hang too. The app appears frozen with no error anywhere. Dropping log lines is obviously preferable to freezing the application; logs are diagnostic, serving video is the product.</dd>
+    <dt>Consequences</dt><dd>Request threads can no longer block on output. Log lines may be dropped under extreme pressure (never observed in practice). Startup banner prints use <code>flush=True</code> so they appear immediately even when redirected to a file.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-15">
+  <header><span class="id">ADR-15</span><span class="t">Saved playback position is keyed by filename stem, not by VOD ID</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd>Resume positions live in <code>localStorage</code>. Phase 6 changed VOD IDs (<a href="#adr-10">ADR-10</a>).</dd>
+    <dt>Decision</dt><dd>Keep the key as <code>ts.pos.&lt;stem&gt;</code> — deliberately <em>not</em> updated to the new composite ID.</dd>
+    <dt>Rationale</dt><dd>Two benefits fall out of this. Existing saved positions survived the ID change with no migration. And because the user keeps a local copy of a NAS VOD, opening either copy resumes from the same place — the position follows the <em>content</em> rather than the storage location, which is what a viewer actually means by "where I was."</dd>
+    <dt>Consequences</dt><dd>Two genuinely different VODs that share a filename stem would share a resume position. Acceptable: identical stems almost always mean identical content, since the stem encodes date and stream title.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="adr-16">
+  <header><span class="id">ADR-16</span><span class="t">Serve the logo from the app directory, not the media root</span></header>
+  <div class="body"><dl>
+    <dt>Context</dt><dd><code>icon.png</code> sits in the project root, which is also a library folder — but <code>--dir</code> can point the library elsewhere entirely.</dd>
+    <dt>Decision</dt><dd>A dedicated <code>/icon.png</code> route resolves against <code>APP_DIR</code> (where <code>server.py</code> lives), independent of any library folder. No duplicate copy is placed in <code>static/</code>.</dd>
+    <dt>Rationale</dt><dd>The logo is an application asset, not media. Resolving it against the library root would break the header the moment someone runs <code>--dir /Volumes/NAS/VODs</code>. Keeping the single copy in the project root also lets it double as the repository logo.</dd>
+    <dt>Consequences</dt><dd>The <code>&lt;img&gt;</code> uses <code>alt=""</code> because the word "TwitchSync" sits beside it — correct treatment for a decorative image, and it means a missing file degrades to nothing rather than stray alt text.</dd>
+  </dl></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="defects">7. Defects found &amp; fixed</h2>
+
+<p>All five were found by verification against the running application or real data — none by code review alone. That is the argument for the build-then-verify-live loop used throughout.</p>
+
+<div class="rec" id="bug-01">
+  <header><span class="id">BUG-01</span><span class="t">Play/pause, mute and fullscreen icons never toggled</span><span class="pill p-warn">functional</span></header>
+  <div class="body"><dl>
+    <dt>Symptom</dt><dd>Video played correctly but the control bar always showed the "play" triangle, never the pause bars. Same for the mute and fullscreen icon pairs.</dd>
+    <dt>Root cause</dt><dd>The icons are inline <code>&lt;svg&gt;</code> elements and the code set <code>element.hidden = true/false</code>. <strong><code>SVGElement</code> has no <code>hidden</code> IDL property</strong> — verified at runtime: <code>"hidden" in SVGElement.prototype === false</code>. The assignment created a meaningless expando property; the CSS <code>[hidden]</code> rule matches the <em>attribute</em>, which was never written. It fails silently with no error.</dd>
+    <dt>Fix</dt><dd>A <code>show(node, visible)</code> helper in <code>player.js</code> that toggles the attribute via <code>setAttribute</code>/<code>removeAttribute</code>. Applied to all three icon pairs.</dd>
+    <dt>Lesson</dt><dd>The <code>hidden</code> property is an <code>HTMLElement</code> convenience, not a universal DOM feature. For SVG (and MathML) always toggle the attribute.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="bug-02">
+  <header><span class="id">BUG-02</span><span class="t">Traceback spam from reset keep-alive connections</span><span class="pill p-warn">noise</span></header>
+  <div class="body"><dl>
+    <dt>Symptom</dt><dd>Multi-line <code>ConnectionResetError</code> tracebacks in the server terminal during normal use.</dd>
+    <dt>Root cause</dt><dd>Guards existed on the streaming loop and on <code>finish()</code>, but the reset surfaced from a third place: <code>handle_one_request()</code> blocking on <code>rfile.readline()</code> while a keep-alive connection waits for its next request. When the browser discards a media connection mid-scrub — which it does constantly — that read raises, and <code>socketserver</code> prints the traceback.</dd>
+    <dt>Fix</dt><dd>Override <code>handle()</code> to swallow <code>BrokenPipeError</code>/<code>ConnectionResetError</code>, joining the existing guards at the other two sites.</dd>
+    <dt>Lesson</dt><dd>With HTTP/1.1 keep-alive there are three distinct places a client disconnect can surface: mid-write, at flush during <code>finish()</code>, and at the idle read between requests. All three need handling.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="bug-03">
+  <header><span class="id">BUG-03</span><span class="t">Space-bar shortcut ignored when key events carry an empty <code>key</code></span><span class="pill p-dim">robustness</span></header>
+  <div class="body"><dl>
+    <dt>Symptom</dt><dd>Space did not toggle playback under automated key injection; <code>m</code> and other letters worked.</dd>
+    <dt>Root cause</dt><dd>Instrumenting <code>keydown</code> showed genuine trusted events arriving with <code>key: ""</code>, <code>code: ""</code>, <code>keyCode: 0</code> for space. The handler switched on <code>e.key</code>, so the case never matched.</dd>
+    <dt>Fix</dt><dd>Resolve the key as <code>e.code === "Space" ? " " : e.key</code> before the switch.</dd>
+    <dt>Honest scope note</dt><dd>This originates from the automation layer, not from real keyboards — a human pressing space produces <code>key: " "</code>. The fix is defensive hardening rather than a user-facing bug fix, and is recorded as such rather than overclaimed.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="bug-04">
+  <header><span class="id">BUG-04</span><span class="t">Case-sensitive pairing silently hid over half the NAS library</span><span class="pill p-bad">data loss (visibility)</span></header>
+  <div class="body"><dl>
+    <dt>Symptom</dt><dd>Would have manifested as VODs simply not appearing in the library, with no error or warning.</dd>
+    <dt>Root cause</dt><dd>Pairing looked up <code>stem + ".json"</code> in a Python dict built from <code>scandir</code> names. Dict lookups are case-sensitive even though macOS/SMB filesystems are typically not. The user's real library contains <strong>31 <code>.Json</code> files versus 24 <code>.json</code></strong>, so 31 VODs would have been invisible.</dd>
+    <dt>Fix</dt><dd>Case-insensitive extension matching (<a href="#adr-11">ADR-11</a>).</dd>
+    <dt>Lesson</dt><dd>This class of bug is invisible to synthetic test data — it only appeared because the implementation was pointed at the user's actual archive, accumulated across years and tool versions. Test against real data.</dd>
+  </dl></div>
+</div>
+
+<div class="rec" id="bug-05">
+  <header><span class="id">BUG-05</span><span class="t">A stalled output pipe froze the entire server</span><span class="pill p-bad">availability</span></header>
+  <div class="body"><dl>
+    <dt>Symptom</dt><dd>A <code>POST /api/folders</code> hung for over 120 seconds with no response. The configuration file had been written, so the work had completed — yet nothing came back. Subsequent <code>GET /api/videos</code> also hung.</dd>
+    <dt>Diagnosis</dt><dd>The decisive observation: <strong><code>GET /</code> returned in 35 ms while every <code>/api/*</code> path hung.</strong> The only behavioural difference between them is that <code>log_request</code> logs API paths and skips static ones. That isolated the fault to the log write. Confirmed by running the same server with stderr redirected to a file, where the identical POST returned in milliseconds.</dd>
+    <dt>Root cause</dt><dd>The harness capturing the server's output stopped draining its pipe. Once the pipe buffer filled, <code>sys.stderr.write()</code> blocked. Because <code>send_response()</code> logs <em>before</em> writing the response, the handler thread blocked while still holding the library lock, so every other library request queued behind it. The app looked frozen with no error anywhere.</dd>
+    <dt>Fix</dt><dd>Background log worker with a bounded, drop-on-full queue (<a href="#adr-14">ADR-14</a>).</dd>
+    <dt>Lesson</dt><dd>Worth internalising generally: <strong>writing to stdout/stderr is a blocking I/O operation on a resource you do not control.</strong> Any server that logs synchronously on the request path can be frozen by whatever is (not) reading its output — a piped launcher, a paused terminal, a log collector that stalls.</dd>
+  </dl></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="nonissues">8. Investigated and cleared (non-defects)</h2>
+
+<p>Recorded so a future maintainer does not re-investigate them.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Observation</th><th>Investigation</th><th>Conclusion</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="nowrap"><code>ERR_CONTENT_LENGTH_MISMATCH</code> in the browser console</td>
+      <td>Fetched every resource on the page and compared declared <code>Content-Length</code> against bytes received: <code>/icon.png</code> 158,112 = 158,112; <code>style.css</code> 8,877 = 8,877; <code>chat.js</code> 11,699 = 11,699; <code>/api/videos</code> 622 = 622. All exact.</td>
+      <td>Retained console entry from a previous page's aborted <code>/media</code> stream — the server declares a 24 GB length and the connection is torn down on navigation. Expected and harmless.</td>
+    </tr>
+    <tr>
+      <td class="nowrap">Fullscreen button does nothing</td>
+      <td><code>document.fullscreenEnabled</code> reports <code>true</code>, but <code>requestFullscreen()</code> rejects with <em>"Permissions check failed"</em>.</td>
+      <td>The embedded preview pane forbids the Fullscreen API. Standard one-click implementation; will work in a normal browser tab. <strong>Not verified in a real browser</strong> — see <a href="#limitations">§13</a>.</td>
+    </tr>
+    <tr>
+      <td class="nowrap">Video stuck at <code>readyState 0</code></td>
+      <td>Server confirmed healthy in parallel (<code>206</code> to a curl range request while the tab was stuck).</td>
+      <td>Artefact of a single preview tab reused across many navigations, including a <code>file://</code> snapshot. A fresh page load restored normal playback. Not reproducible in ordinary use.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="verification">9. Verification log</h2>
+
+<p>Nothing in this document is claimed on the basis of code reading alone. This is what was actually executed.</p>
+
+<h3>9.1 Server (curl, before any frontend existed)</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Check</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td><code>HEAD /media</code></td><td>200, <code>Accept-Ranges: bytes</code>, <code>Content-Length: 23931038951</code></td></tr>
+    <tr><td><code>Range: bytes=100-199</code></td><td>206, exactly 100 bytes</td></tr>
+    <tr><td><code>Range: bytes=999999999999-</code></td><td>416 with <code>Content-Range: bytes */23931038951</code></td></tr>
+    <tr><td><code>Range: bytes=-100</code> (the tail fetch that finds <code>moov</code>)</td><td>206, <code>Content-Range: bytes 23931038851-23931038950/23931038951</code></td></tr>
+    <tr><td><code>/media?v=../../../etc/passwd</code></td><td>404</td></tr>
+    <tr><td><code>/static/../server.py</code></td><td>404</td></tr>
+    <tr><td><code>/api/videos</code></td><td>Correct title, streamer <code>summit1g</code>, game <code>ARC Raiders</code>, 24446 s; chat render correctly absent</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>9.2 Folder API (phase 6)</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Case</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr><td>Add <code>/Volumes/SHARE1821/VODs</code></td><td><code>{"ok": true, "message": "Added 36 VODs."}</code></td></tr>
+    <tr><td>Add a non-existent path</td><td>Rejected: "That path doesn't exist. If it's a network share, mount it in Finder first."</td></tr>
+    <tr><td>Add the same folder twice</td><td>Rejected: "That folder is already in the library."</td></tr>
+    <tr><td>Add the project folder</td><td>Rejected: "That's already the project folder."</td></tr>
+    <tr><td>Add a file rather than a directory</td><td>Rejected: "That path is a file, not a folder."</td></tr>
+    <tr><td>POST with form content type (CSRF probe)</td><td>415</td></tr>
+    <tr><td>Add then remove via the UI</td><td>Both round-trips succeeded; <code>folders.json</code> reflected each change</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>9.3 Application (browser automation against the running server)</h3>
+<ul>
+  <li><strong>Playback and seeking:</strong> opened the 23.9 GB local VOD, seeked repeatedly; six rapid seeks in a row produced <strong>zero server tracebacks</strong>.</li>
+  <li><strong>Chat synchronisation:</strong> verified at 3:00:15 and 3:50:15 on the local VOD, and at 10:00:25 on the NAS VOD — where the visible messages spanned 9:58:58 → 10:00:17, i.e. exactly the seek target with the intended backfill.</li>
+  <li><strong>Emote/badge rendering:</strong> static PNG, animated GIF and animated WebP emotes all render and animate; badges render at 18 px; zero-width overlays composite correctly; colourless users get a stable colour.</li>
+  <li><strong>Offline audit:</strong> 99 chat images on screen, <strong>100% <code>blob:</code> scheme, 0 broken</strong>; the network log contained no entry for any external host, specifically none matching <code>jtvnw|betterttv|7tv|frankerfacez|twitch.tv|cloudfront|cdn</code>. Static analysis independently confirmed the only <code>fetch</code> targets are <code>/api/videos</code>, <code>/api/folders</code>, <code>/chat</code>, <code>/media</code>.</li>
+  <li><strong>Chat scrollback:</strong> scrolling up unpins and shows the "Chat paused" pill; clicking it re-pins to the bottom with no content jump.</li>
+  <li><strong>Controls:</strong> play/pause, speed menu (persisted to <code>localStorage</code>), mute, keyboard shortcuts, resume-from-saved-position toast.</li>
+  <li><strong>Lifecycle:</strong> back-to-library tears down cleanly — <code>video.src</code> removed, chat DOM emptied, Blob URLs revoked — and reopening works.</li>
+  <li><strong>Multi-folder:</strong> library shows 37 VODs (36 NAS + 1 project folder), folder tags correct, subfolder VODs present, folder manager counts accurate.</li>
+  <li><strong>Console:</strong> no JavaScript errors across the session; the only console entry was the cleared <code>ERR_CONTENT_LENGTH_MISMATCH</code> above.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="performance">10. Measured performance</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Operation</th><th class="nowrap">Measurement</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Seek to 10 h into a 43.7 GB VOD <strong>over SMB</strong></td><td class="nowrap"><strong>142 ms</strong></td><td>Time from <code>currentTime</code> assignment to the <code>seeked</code> event; chat rebuilt in the same frame budget</td></tr>
+    <tr><td>Walk the NAS VOD tree (36 pairs, 3 dirs, 104 files)</td><td class="nowrap">0.04 s</td><td>Depth-limited, skip list applied</td></tr>
+    <tr><td><code>stat()</code> all NAS pairs</td><td class="nowrap">0.04 s</td><td>72 stat calls over SMB</td></tr>
+    <tr><td>Head-parse metadata per chat JSON over SMB</td><td class="nowrap">0.03 s</td><td>~1.0 s for all 36 on a cold cache, then cached</td></tr>
+    <tr><td><code>Library.add_folder()</code> incl. rescan</td><td class="nowrap">0.11 s</td><td></td></tr>
+    <tr><td><code>Library.list()</code> across both roots (37 VODs)</td><td class="nowrap">0.40 s</td><td>Cold metadata cache</td></tr>
+    <tr><td>Chat JSON transfer + parse + asset decode</td><td class="nowrap">~2–4 s</td><td>90 MB file, ~950 image decodes; covered by a progress overlay while video plays</td></tr>
+    <tr><td>Steady-state playback bandwidth</td><td class="nowrap">~1 MB/s</td><td>7.8 Mbps source bitrate — 0.4% of a 2.5 GbE link</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="callout c-ok"><span class="label">Headline</span><br>
+The 142 ms deep seek over SMB is the number that validates the whole Range-streaming design: random access into a 43.7 GB network-hosted file is effectively instant, because the client only ever pulls the small window it needs.</p>
+
+<!-- ============================================================ -->
+<h2 id="security">11. Security model</h2>
+
+<ul>
+  <li><strong>Network exposure:</strong> the server binds <code>127.0.0.1</code> only. Nothing is reachable from the LAN or internet; verified during setup.</li>
+  <li><strong>Path handling:</strong> opaque-key resolution plus <code>realpath</code> containment (<a href="#adr-08">ADR-08</a>). Only files discovered as valid VOD pairs inside a configured root can be served.</li>
+  <li><strong>State-changing endpoints:</strong> one (<code>POST /api/folders</code>), protected by the JSON content-type requirement (<a href="#adr-13">ADR-13</a>). Adding a folder is the only way to widen what the server can read, and it requires a deliberate local action.</li>
+  <li><strong>Credentials:</strong> the app never sees, requests, or stores any. NAS authentication is delegated entirely to macOS/Finder/Keychain (<a href="#adr-09">ADR-09</a>).</li>
+  <li><strong>Outbound traffic:</strong> none. The application makes zero external requests — proven by network-log inspection, not just by reading the code (<a href="#verification">§9.3</a>).</li>
+  <li><strong>Data integrity:</strong> the server only ever opens media files for reading. The only file the app writes is <code>folders.json</code> in the app directory.</li>
+  <li><strong>Untrusted input rendered:</strong> chat messages are user-authored text from Twitch. They are inserted with <code>textContent</code> and <code>createTextNode</code> — never <code>innerHTML</code> — so message content cannot inject markup or script.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="inventory">12. File inventory</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Path</th><th class="nowrap">Status</th><th class="nowrap">Lines</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap"><code>server.py</code></td><td class="nowrap">created, then rewritten in phase 6</td><td>598</td><td>Entire backend: library scanning, folder management, Range streaming, JSON API</td></tr>
+    <tr><td class="nowrap"><code>static/index.html</code></td><td class="nowrap">created</td><td>118</td><td>Single page hosting both views; inline SVG control icons</td></tr>
+    <tr><td class="nowrap"><code>static/style.css</code></td><td class="nowrap">created</td><td>307</td><td>Dark theme; CSS-grid player layout; folder-manager styles</td></tr>
+    <tr><td class="nowrap"><code>static/js/main.js</code></td><td class="nowrap">created</td><td>125</td><td>Routing (<code>?v=</code>), view switching, open/close lifecycle, teardown orchestration</td></tr>
+    <tr><td class="nowrap"><code>static/js/library.js</code></td><td class="nowrap">created</td><td>149</td><td>VOD card rendering; folder manager (add/remove, volume chips, messages)</td></tr>
+    <tr><td class="nowrap"><code>static/js/player.js</code></td><td class="nowrap">created</td><td>493</td><td>Playback, control bar, seek bar + histogram, fullscreen, shortcuts, resume</td></tr>
+    <tr><td class="nowrap"><code>static/js/chat.js</code></td><td class="nowrap">created</td><td>351</td><td>Chat fetch/parse, asset maps, message rendering, sync engine, scroll management</td></tr>
+    <tr><td class="nowrap"><code>static/js/util.js</code></td><td class="nowrap">created</td><td>92</td><td><code>fmtTime</code>, <code>fmtBytes</code>, <code>colorHash</code>, <code>readableColor</code>, <code>upperBound</code>, <code>sniffImageMime</code>, safe <code>localStorage</code></td></tr>
+    <tr><td class="nowrap"><code>USER_GUIDE.html</code></td><td class="nowrap">created</td><td>752</td><td>End-user manual, 16 sections, self-contained, two custom diagrams</td></tr>
+    <tr><td class="nowrap"><code>DEVELOPMENT_SUMMARY.html</code></td><td class="nowrap">created</td><td>—</td><td>This document</td></tr>
+    <tr><td class="nowrap"><code>README.md</code></td><td class="nowrap">extended</td><td>71</td><td>User's original stub kept; run instructions, library folders, player summary added</td></tr>
+    <tr><td class="nowrap"><code>.gitignore</code></td><td class="nowrap">created (since edited by user)</td><td>11</td><td>Keeps multi-GB media and generated config out of git</td></tr>
+    <tr><td class="nowrap"><code>.claude/launch.json</code></td><td class="nowrap">created</td><td>—</td><td>Dev-server definition for the preview tooling</td></tr>
+    <tr><td class="nowrap"><code>icon.png</code></td><td class="nowrap">user-supplied, wired in</td><td>—</td><td>900×900 palette PNG with genuine alpha (<code>tRNS</code> index 0) — hence no backing tile needed on the dark header</td></tr>
+    <tr><td class="nowrap"><code>folders.json</code></td><td class="nowrap">generated at runtime</td><td>—</td><td>Added library folders; delete to reset. Already covered by <code>.gitignore</code>'s <code>*.json</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The approved implementation plan from phase 1 remains at <code>~/.claude/plans/this-is-a-new-jaunty-lagoon.md</code>.</p>
+
+<!-- ============================================================ -->
+<h2 id="limitations">13. Known limitations &amp; future work</h2>
+
+<h3>13.1 Accepted limitations</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Limitation</th><th>Detail and reasoning</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap">Chat re-parsed on every open</td><td>The 90 MB JSON is fetched, parsed and decoded each time a VOD opens (~2–4 s under a progress overlay). A preprocessed sidecar cache — compact binary index plus a sprite/asset bundle — would make this near-instant. Deliberately not built: it adds a preprocessing step, which is precisely what the project set out to avoid, and the cost is paid once per viewing session.</td></tr>
+    <tr><td class="nowrap">No seek-bar thumbnails</td><td>Would require decoding frames ahead of time (a preprocessing pass). The chat-activity histogram was built instead and arguably serves the "find the good part" need better for this content.</td></tr>
+    <tr><td class="nowrap">Bits/cheermotes render as plain text</td><td>Exactly one comment in the sample VOD spends bits. Full cheermote tier rendering was judged not worth the complexity; the message still reads correctly.</td></tr>
+    <tr><td class="nowrap">Profile avatars not shown</td><td>Their URLs exist in the JSON but are never requested — rendering them would break the offline guarantee. Twitch chat does not show avatars either.</td></tr>
+    <tr><td class="nowrap">Multi-range requests</td><td>Only the first range of a multi-range request is served. Legal, and no browser issues them for media.</td></tr>
+    <tr><td class="nowrap">Scan depth capped at 4</td><td>Deeper VODs need their folder added directly. Documented in the guide.</td></tr>
+    <tr><td class="nowrap">No authentication</td><td>By design: localhost-only, single user.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>13.2 Untested or environment-limited</h3>
+<ul>
+  <li><strong>Fullscreen has not been exercised in a real browser</strong> — the embedded preview pane blocks the API (<a href="#nonissues">§8</a>). The implementation is the conventional <code>requestFullscreen()</code> on the whole player grid, but a maintainer should confirm it, including the 3-second control auto-hide behaviour.</li>
+  <li><strong>Platform portability.</strong> The server itself is portable Python, but the mounted-volume suggestion chips enumerate <code>/Volumes</code>, which is macOS-specific. On Windows or Linux the chips would simply be empty — folders can still be added by typing a path. Extending <code>list_volumes()</code> with <code>/media</code>, <code>/mnt</code> and drive letters would be a small, self-contained improvement.</li>
+  <li><strong>Stale network mounts.</strong> Availability is a plain <code>os.path.isdir()</code> check. A <em>hung</em> (rather than absent) SMB mount could block a scan, since there is no timeout around filesystem calls. Not observed; would need a watchdog thread to handle properly.</li>
+</ul>
+
+<h3>13.3 Suggested next steps, roughly by value</h3>
+<ol>
+  <li>Verify fullscreen and control auto-hide in a normal browser tab.</li>
+  <li>Optional chat sidecar cache (§13.1) if the open-time delay becomes annoying in daily use.</li>
+  <li>Chapter markers on the seek bar — the data is already parsed and returned in <code>/api/videos</code>, it is only unused by the UI. This was the Plan agent's stretch suggestion.</li>
+  <li>Cross-platform <code>list_volumes()</code>.</li>
+  <li>Housekeeping: <code>__pycache__/</code> currently shows as untracked in <code>git status</code> and could be added to <code>.gitignore</code> (left alone here because the user has since edited that file themselves).</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="api">Appendix A — HTTP API reference</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="nowrap">Method &amp; path</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap"><code>GET /</code></td><td>Serves <code>static/index.html</code>, <code>Cache-Control: no-store</code></td></tr>
+    <tr><td class="nowrap"><code>GET /static/&lt;rel&gt;</code></td><td>Static asset; realpath must remain inside <code>static/</code>, else 403</td></tr>
+    <tr><td class="nowrap"><code>GET /icon.png</code></td><td>App logo resolved against <code>APP_DIR</code> (<a href="#adr-16">ADR-16</a>)</td></tr>
+    <tr><td class="nowrap"><code>GET /api/videos</code></td><td>Rescans every online root; returns the combined VOD list, newest first. Per entry: <code>id</code>, <code>stem</code>, <code>title</code>, <code>streamer</code>, <code>game</code>, <code>durationSec</code>, <code>sizeBytes</code>, <code>mtime</code>, <code>chapters</code>, <code>rootId</code>, <code>rootLabel</code>, <code>folder</code></td></tr>
+    <tr><td class="nowrap"><code>GET /api/folders</code></td><td><code>{folders: [{id, path, label, removable, online, videoCount}], volumes: [{name, path}]}</code></td></tr>
+    <tr><td class="nowrap"><code>POST /api/folders</code></td><td>Requires <code>Content-Type: application/json</code> (else 415) and a body ≤ 64 KB. <code>{action:"add", path}</code> or <code>{action:"remove", id}</code>. Returns <code>{ok, message}</code>; 400 on validation failure</td></tr>
+    <tr><td class="nowrap"><code>GET /chat?v=&lt;id&gt;</code></td><td>Streams the chat JSON with a known <code>Content-Length</code> so the client can show real progress</td></tr>
+    <tr><td class="nowrap"><code>GET /media?v=&lt;id&gt;</code></td><td>Streams the MP4 with full Range support: 200 / 206 / 416 (<a href="#adr-03">ADR-03</a>)</td></tr>
+    <tr><td class="nowrap"><code>GET /favicon.ico</code></td><td>204 (the real icon is a data-URI in the HTML)</td></tr>
+    <tr><td class="nowrap">anything else</td><td>404 JSON</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Both <code>/chat</code> and <code>/media</code> accept either a composite ID or a bare filename stem for backward compatibility (<a href="#adr-10">ADR-10</a>).</p>
+
+<!-- ============================================================ -->
+<h2 id="dataformat">Appendix B — chat JSON format notes</h2>
+
+<p>Reference for anyone extending the renderer. Structure as emitted by TwitchDownloader with image embedding enabled.</p>
+
+<pre><code>{
+  "FileInfo":  { "Version", "CreatedAt", "UpdatedAt" },
+  "streamer":  { "name", "login", "id" },
+  "clipper":   null,
+  "video":     { "title", "id", "created_at", "start", "end", "length",
+                 "viewCount", "game", "chapters": [ { "startMilliseconds",
+                 "lengthMilliseconds", "description", "gameDisplayName", … } ] },
+  "comments":  [ {
+      "_id", "created_at", "channel_id",
+      "content_offset_seconds",              // seconds from stream start — the sync key
+      "commenter": { "display_name", "name", "logo", … },
+      "message": {
+        "body",                              // plain text, fallback if fragments absent
+        "bits_spent",
+        "fragments":   [ { "text", "emoticon": null | { "emoticon_id" } } ],
+        "user_badges": [ { "_id", "version" } ],
+        "user_color":  "#RRGGBB" | absent,   // absent for 1,820 of 20,514 here
+        "emoticons":   [ { "_id", "begin", "end" } ]   // legacy index form; unused
+      } } ],
+  "embeddedData": {
+    "firstParty":   [ { "id", "imageScale", "data", "name", "width", "height" } ],
+    "thirdParty":   [ { "id", "imageScale", "data", "name", "width", "height",
+                        "isZeroWidth" } ],
+    "twitchBadges": [ { "name", "versions": { "&lt;ver&gt;": { "bytes", "title",
+                                                       "description" } } } ],
+    "twitchBits":   [ { "prefix", "tierList" } ]
+  } }</code></pre>
+
+<h4>Rendering rules implemented</h4>
+<ol>
+  <li><strong>First-party emotes</strong> — a fragment with a non-null <code>emoticon</code> is looked up by <code>emoticon_id</code> in <code>firstParty</code>. On a miss, the fragment's <code>text</code> is rendered instead (graceful degradation, never a broken image).</li>
+  <li><strong>Third-party emotes</strong> (BTTV/FFZ/7TV) — text fragments are split on spaces and each word is looked up <em>by name</em> in <code>thirdParty</code>. This is why they need whole-word matching rather than substring scanning.</li>
+  <li><strong>Zero-width emotes</strong> — an <code>isZeroWidth</code> hit immediately following an emote (with only whitespace between) is appended <em>inside</em> the previous emote's wrapper span, absolutely centred, so multiple effects stack on one base emote. If there is no eligible base, it renders as an ordinary emote.</li>
+  <li><strong>Badges</strong> — looked up as <code>` ${_id}/${version} `</code>; unknown badges are skipped silently rather than leaving a gap.</li>
+  <li><strong>Sizing</strong> — images are given the <em>declared</em> <code>width</code>/<code>height</code>, because the stored bitmap is <code>imageScale</code>× larger.</li>
+  <li><strong>Colours</strong> — <code>user_color</code> when present; otherwise Twitch's own default algorithm, <code>(firstCharCode + lastCharCode) % 15</code> indexed into the standard 15-colour palette, so colourless users are stable across sessions and match what Twitch would show. Any colour too dark to read on the dark panel is blended toward white proportionally to its darkness.</li>
+  <li><strong>Text nodes</strong> — consecutive plain words are coalesced into a single text node rather than one per word, which materially reduces node count over thousands of messages.</li>
+</ol>
+
+<footer>
+  TwitchSync development summary · session of 8 August 2026 · self-contained, opens directly from the project folder.<br>
+  Companion documents: <code>USER_GUIDE.html</code> (end-user manual) and <code>README.md</code> (quick start).
+</footer>
+
+</main>
+</body>
+</html>
