@@ -1,0 +1,11 @@
+# VOD media lives beside the app but never belongs in git (files are 3–24 GB)
+*.mp4
+*.json
+example.png
+
+# macOS
+.DS_Store
+
+# local session config
+.claude/
+DEVELOPMENT_SUMMARY.html
