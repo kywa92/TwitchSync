@@ -9,3 +9,6 @@ example.png
 # local session config
 .claude/
 DEVELOPMENT_SUMMARY.html
+
+# Python bytecode
+__pycache__/
