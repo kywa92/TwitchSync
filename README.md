@@ -9,7 +9,7 @@ guide to setup, the library, every player control, and troubleshooting.
 
 On first run, point TwitchSync at your library of [TwitchDownloader](https://github.com/lay295/TwitchDownloader) VOD mp4 files and associated json chat files. TwitchSync serves a small local site listing every VOD it finds, and a player with the VOD video on the left, a Twitch style chat column on the right, and one set of controls at the bottom. Chat is rendered in HTML straight from the chat JSON and tied to the video clock, so scrubbing anywhere instantly shows the chat from that moment. TwitchSync can read both local and remote (NAS/network storage) libraries. 
 
-<img width="500" height="" alt="screenshot4" src="https://github.com/user-attachments/assets/edb2f19f-7f37-4d63-b419-7c2ba3bf0c9a" />
+<img width="800" height="" alt="screenshot4" src="https://github.com/user-attachments/assets/edb2f19f-7f37-4d63-b419-7c2ba3bf0c9a" />
 
 
 ## Run
