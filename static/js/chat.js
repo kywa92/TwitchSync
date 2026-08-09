@@ -42,6 +42,12 @@ export class Chat {
     this.loadBox.hidden = false;
     this.errBox.hidden = true;
     this._setProgress("Downloading chat…", 0);
+    // Locally cached BTTV/7TV emotes (built by `server.py --sync-emotes`) fill
+    // in emotes missing from this VOD's embedded set. Fetched in parallel with
+    // the chat download; absent cache resolves to null and costs nothing.
+    const manifestP = fetch("/emotes/manifest.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
     try {
       const res = await fetch("/chat?v=" + encodeURIComponent(this.vod.id));
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -64,6 +70,9 @@ export class Chat {
       const data = JSON.parse(text);
       if (this._destroyed) return;
       this._build(data);
+      const manifest = await manifestP;
+      if (this._destroyed) return;
+      if (manifest) this._mergeEmoteManifest(manifest);
       this.loadBox.hidden = true;
       this._bind();
       this._syncToTime(); // covers an already-applied resume seek
@@ -158,6 +167,25 @@ export class Chat {
     if (!n) {
       this.errBox.textContent = "No chat messages";
       this.errBox.hidden = false;
+    }
+  }
+
+  // Cached emotes only fill gaps: an emote embedded in the chat JSON is the
+  // version that was live when the VOD was downloaded, so it always wins.
+  // Manifest w/h are raw file pixels at `scale`; makeImg wants display px.
+  _mergeEmoteManifest(manifest) {
+    const emotes = manifest && manifest.emotes;
+    if (!emotes || typeof emotes !== "object") return;
+    if (!this.thirdParty) this.thirdParty = new Map();
+    for (const [name, m] of Object.entries(emotes)) {
+      if (!name || !m || !m.file || this.thirdParty.has(name)) continue;
+      const scale = m.scale > 0 ? m.scale : 2;
+      this.thirdParty.set(name, {
+        url: "/emotes/" + encodeURIComponent(m.file),
+        w: m.w > 0 ? Math.max(1, Math.round(m.w / scale)) : 28,
+        h: m.h > 0 ? Math.max(1, Math.round(m.h / scale)) : 28,
+        zw: !!m.zw,
+      });
     }
   }
 

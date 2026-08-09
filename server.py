@@ -19,7 +19,9 @@ import queue
 import re
 import sys
 import threading
+import urllib.error
 import urllib.parse
+import urllib.request  # only used by the explicit --sync-emotes CLI mode
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -32,6 +34,10 @@ MAX_DEPTH = 4  # how far to recurse into a library folder
 # NAS/system directories that never hold VODs and are slow or wrong to walk.
 SKIP_DIRS = {"@eaDir", "#recycle", "#snapshot", "node_modules", "__pycache__"}
 MAX_BODY = 64 * 1024
+THUMB_MAX_BODY = 512 * 1024  # a 320x180 JPEG is ~20 KB; generous headroom
+
+THUMB_DIR = os.path.join(APP_DIR, "thumb-cache")
+EMOTE_DIR = os.path.join(APP_DIR, "emote-cache")
 
 STATIC_MIME = {
     ".html": "text/html; charset=utf-8",
@@ -40,6 +46,12 @@ STATIC_MIME = {
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".ico": "image/x-icon",
+    ".avif": "image/avif",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".json": "application/json; charset=utf-8",
 }
 
 RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)(?:$|,)")
@@ -70,6 +82,19 @@ def read_head_meta(json_path):
 
 def root_id(path):
     return hashlib.sha1(path.encode("utf-8")).hexdigest()[:8]
+
+
+def thumb_path(mp4_path):
+    """Cache location of a VOD's thumbnail. The name is derived server-side from
+    the resolved mp4 path + size (never from anything the client sent), so path
+    traversal is impossible by construction and a re-downloaded file's stale
+    thumb self-invalidates."""
+    try:
+        size = os.stat(mp4_path).st_size
+    except OSError:
+        return None
+    key = hashlib.sha1(("%s:%d" % (mp4_path, size)).encode("utf-8")).hexdigest()[:16]
+    return os.path.join(THUMB_DIR, key + ".jpg")
 
 
 # Log lines are written by a background thread so that a stderr pipe nobody is
@@ -412,23 +437,39 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_vod(query, "json", "application/json; charset=utf-8")
         if path == "/media":
             return self._serve_vod(query, "mp4", "video/mp4")
+        if path == "/thumb":
+            return self._serve_thumb(query)
+        if path.startswith("/emotes/"):
+            return self._serve_emote(path[len("/emotes/"):])
         return self._json_error(404, "not found")
 
     def _route_post(self):
-        path = urllib.parse.urlsplit(self.path).path
-        if path != "/api/folders":
-            return self._json_error(404, "not found")
+        parts = urllib.parse.urlsplit(self.path)
+        path = parts.path
+        if path == "/api/folders":
+            return self._post_folders()
+        if path == "/thumb":
+            return self._post_thumb(urllib.parse.parse_qs(parts.query))
+        return self._json_error(404, "not found")
+
+    def _reject_body(self, code, msg):
+        # Rejecting a POST without draining its body leaves the unread bytes on
+        # the keep-alive connection and desyncs the next request — close instead.
+        self.close_connection = True
+        self._json_error(code, msg)
+
+    def _post_folders(self):
         # Requiring a JSON body means a cross-origin POST would need a CORS
         # preflight, which this server never answers — so only this app can call it.
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if ctype != "application/json":
-            return self._json_error(415, "expected application/json")
+            return self._reject_body(415, "expected application/json")
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
-            return self._json_error(400, "bad content-length")
+            return self._reject_body(400, "bad content-length")
         if length <= 0 or length > MAX_BODY:
-            return self._json_error(400, "bad request body")
+            return self._reject_body(400, "bad request body")
         try:
             body = json.loads(self.rfile.read(length).decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
@@ -444,6 +485,52 @@ class Handler(BaseHTTPRequestHandler):
         else:
             return self._json_error(400, "unknown action")
         self._send_json({"ok": ok, "message": message}, status=200 if ok else 400)
+
+    def _post_thumb(self, query):
+        # image/jpeg is not a CORS-safelisted content type, so a cross-origin
+        # POST would need a preflight this server never answers — same
+        # protection as the JSON requirement on /api/folders.
+        ids = query.get("v")
+        if not ids:
+            return self._reject_body(400, "missing v parameter")
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype != "image/jpeg":
+            return self._reject_body(415, "expected image/jpeg")
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self._reject_body(400, "bad content-length")
+        if length <= 0 or length > THUMB_MAX_BODY:
+            return self._reject_body(413, "bad request body")
+        mp4 = self.server.library.resolve(ids[0], "mp4")
+        if mp4 is None:
+            return self._reject_body(404, "unknown video")
+        body = b""
+        while len(body) < length:
+            chunk = self.rfile.read(length - len(body))
+            if not chunk:
+                break
+            body += chunk
+        if len(body) != length:
+            return self._reject_body(400, "truncated body")
+        if body[:3] != b"\xff\xd8\xff":
+            return self._json_error(400, "not a JPEG")
+        dest = thumb_path(mp4)
+        if dest is None:
+            return self._json_error(404, "unknown video")
+        tmp = "%s.%d.%d.tmp" % (dest, os.getpid(), threading.get_ident())
+        try:
+            os.makedirs(THUMB_DIR, exist_ok=True)
+            with open(tmp, "wb") as f:
+                f.write(body)
+            os.replace(tmp, dest)  # concurrent writers: last replace wins, atomically
+        except OSError as e:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            return self._json_error(500, "could not store thumbnail (%s)" % (e.strerror or e))
+        self._send_json({"ok": True})
 
     # --- endpoints ----------------------------------------------------------
 
@@ -476,9 +563,37 @@ class Handler(BaseHTTPRequestHandler):
         ctype = STATIC_MIME.get(os.path.splitext(full)[1].lower(), "application/octet-stream")
         self._send_file(full, ctype)
 
+    def _serve_thumb(self, query):
+        ids = query.get("v")
+        if not ids:
+            return self._json_error(400, "missing v parameter")
+        mp4 = self.server.library.resolve(ids[0], "mp4")
+        if mp4 is None:
+            return self._json_error(404, "unknown video")
+        path = thumb_path(mp4)
+        if path is None or not os.path.isfile(path):
+            return self._json_error(404, "no thumbnail")
+        self._send_file(path, "image/jpeg")
+
+    def _serve_emote(self, rel):
+        # emote-cache/ is flat: after decoding, anything that isn't a plain
+        # filename is out (stricter than realpath containment, and sufficient).
+        rel = urllib.parse.unquote(rel)
+        if not rel or "/" in rel or "\\" in rel or rel.startswith("."):
+            return self._json_error(403, "forbidden")
+        full = os.path.join(EMOTE_DIR, rel)
+        if not os.path.isfile(full):
+            return self._json_error(404, "not found")
+        ctype = STATIC_MIME.get(os.path.splitext(full)[1].lower(), "application/octet-stream")
+        # Chat re-creates <img> nodes constantly; no-store would refetch every
+        # emote per message. The manifest stays no-store so a re-sync is picked
+        # up on the next chat load.
+        cache = "no-store" if rel == "manifest.json" else "public, max-age=86400"
+        self._send_file(full, ctype, cache_control=cache)
+
     # --- plumbing -----------------------------------------------------------
 
-    def _send_file(self, path, ctype):
+    def _send_file(self, path, ctype, cache_control="no-store"):
         try:
             f = open(path, "rb")
         except OSError:
@@ -506,7 +621,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Accept-Ranges", "bytes")
             if status == 206:
                 self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache_control)
             self.end_headers()
             if self.command == "HEAD":
                 return
@@ -561,17 +676,320 @@ class Handler(BaseHTTPRequestHandler):
             self.log_message('"%s" %s', self.requestline, str(code))
 
 
+# ---- emote sync (explicit CLI mode) -----------------------------------------
+# `python3 server.py --sync-emotes` downloads each library streamer's BTTV/7TV
+# channel emotes plus both global sets into emote-cache/ and writes
+# manifest.json for the chat renderer, then exits. The serving path never
+# touches the network — playback stays fully offline.
+
+EMOTE_HEADERS = {"User-Agent": "TwitchSync/1.0"}
+
+_ssl_ctx = None
+
+
+def _ssl_context():
+    """python.org macOS builds ship OpenSSL with no CA certs wired up; fall back
+    to the system bundle (or certifi if installed) so HTTPS stays verified."""
+    global _ssl_ctx
+    if _ssl_ctx is not None:
+        return _ssl_ctx
+    import ssl
+    ctx = ssl.create_default_context()
+    if ctx.cert_store_stats().get("x509_ca", 0) == 0:
+        cafile = next((p for p in ("/etc/ssl/cert.pem", "/private/etc/ssl/cert.pem")
+                       if os.path.isfile(p)), None)
+        if cafile is None:
+            try:
+                import certifi
+                cafile = certifi.where()
+            except ImportError:
+                pass
+        if cafile:
+            ctx = ssl.create_default_context(cafile=cafile)
+    _ssl_ctx = ctx
+    return ctx
+
+
+def _http_json(url):
+    req = urllib.request.Request(url, headers=EMOTE_HEADERS)
+    with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _http_bytes(url):
+    req = urllib.request.Request(url, headers=EMOTE_HEADERS)
+    with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as resp:
+        return resp.read()
+
+
+def _emote_filename(name, ext):
+    """Sanitized filename for an emote; the hash suffix keeps names like ':tf:'
+    and '_tf_' from colliding after sanitization."""
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", name)[:40]
+    tag = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+    return "%s-%s%s" % (safe, tag, ext)
+
+
+def _seventv_records(emotes):
+    """(name, record) pairs from a 7TV emote list (user emote_set or global set)."""
+    out = []
+    for e in emotes or []:
+        try:
+            name = e.get("name") or ""
+            host = (e.get("data") or {}).get("host") or {}
+            base = host.get("url") or ""
+            files = host.get("files") or []
+            if not name or not base:
+                continue
+            pick = next((f for f in files if f.get("name") == "2x.webp"), None)
+            scale = 2
+            if pick is None:
+                pick = next((f for f in files if f.get("name") == "1x.webp"), None)
+                scale = 1
+            if pick is None:
+                continue
+            url = ("https:" + base if base.startswith("//") else base) + "/" + pick["name"]
+            out.append((name, {
+                "urls": [(url, ".webp")],
+                "w": int(pick.get("width") or 0),
+                "h": int(pick.get("height") or 0),
+                "scale": scale,
+                # zero-width lives on the set-level active-emote flags, bit 0
+                "zw": bool(e.get("flags", 0) & 1),
+            }))
+        except (TypeError, ValueError, KeyError):
+            continue
+    return out
+
+
+def _bttv_records(emotes):
+    """(name, record) pairs from a BTTV emote list (channel+shared or global)."""
+    out = []
+    for e in emotes or []:
+        try:
+            name = e.get("code") or ""
+            eid = e.get("id") or ""
+            if not name or not eid:
+                continue
+            itype = (e.get("imageType") or "png").lower()
+            out.append((name, {
+                # BTTV transcodes to webp on the CDN; the native type is the fallback.
+                "urls": [
+                    ("https://cdn.betterttv.net/emote/%s/2x.webp" % eid, ".webp"),
+                    ("https://cdn.betterttv.net/emote/%s/2x.%s" % (eid, itype), "." + itype),
+                ],
+                "w": 0,  # BTTV's API carries no dimensions; parsed from the file
+                "h": 0,
+                "scale": 2,
+                "zw": False,
+            }))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _avif_dims(head):
+    """Walk ISOBMFF boxes meta → iprp → ipco → ispe for (width, height)."""
+    def boxes(start, end):
+        pos = start
+        while pos + 8 <= end:
+            size = int.from_bytes(head[pos:pos + 4], "big")
+            if size < 8:
+                return
+            yield head[pos + 4:pos + 8], pos + 8, min(pos + size, end)
+            pos += size
+
+    def find(start, end, name, fullbox=False):
+        for typ, s, e in boxes(start, end):
+            if typ == name:
+                return (s + 4 if fullbox else s), e  # FullBox: skip version/flags
+        return None
+
+    span = find(0, len(head), b"meta", fullbox=True)
+    if span:
+        span = find(span[0], span[1], b"iprp")
+    if span:
+        span = find(span[0], span[1], b"ipco")
+    if span:
+        for typ, s, e in boxes(span[0], span[1]):
+            if typ == b"ispe" and e - s >= 12:
+                return (int.from_bytes(head[s + 4:s + 8], "big"),
+                        int.from_bytes(head[s + 8:s + 12], "big"))
+    return None
+
+
+def _image_dims(path):
+    """Best-effort (width, height) from png/gif/webp/avif headers, else None."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096)
+    except OSError:
+        return None
+    try:
+        if head[:8] == b"\x89PNG\r\n\x1a\n":
+            return (int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big"))
+        if head[:4] == b"GIF8":
+            return (int.from_bytes(head[6:8], "little"), int.from_bytes(head[8:10], "little"))
+        if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+            chunk = head[12:16]
+            if chunk == b"VP8X":
+                return (int.from_bytes(head[24:27], "little") + 1,
+                        int.from_bytes(head[27:30], "little") + 1)
+            if chunk == b"VP8 ":
+                return (int.from_bytes(head[26:28], "little") & 0x3FFF,
+                        int.from_bytes(head[28:30], "little") & 0x3FFF)
+            if chunk == b"VP8L":
+                bits = int.from_bytes(head[21:25], "little")
+                return ((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1)
+        if head[4:8] == b"ftyp":
+            return _avif_dims(head)
+    except (IndexError, ValueError):
+        pass
+    return None
+
+
+def sync_emotes(library):
+    with library._lock:
+        library._rescan()
+        jsons = sorted({v["json"] for v in library._vods.values()})
+    ids = []
+    for j in jsons:
+        sid = (read_head_meta(j).get("streamer") or {}).get("id")
+        if isinstance(sid, int) and sid not in ids:
+            ids.append(sid)
+    print("streamers found in library: %s" % (", ".join(str(i) for i in ids) or "none"))
+
+    failures = 0
+
+    def fetch(label, fn):
+        nonlocal failures
+        try:
+            recs = fn()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:  # streamer not on this service — normal, not an error
+                print("  %-24s none (404)" % label)
+                return []
+            print("  %-24s FAILED (%s)" % (label, e))
+            failures += 1
+            return []
+        except Exception as e:
+            print("  %-24s FAILED (%s)" % (label, e))
+            failures += 1
+            return []
+        print("  %-24s %d emotes" % (label, len(recs)))
+        return recs
+
+    # Precedence: channel over global, 7TV over BTTV — first name wins.
+    tiers = []
+    for sid in ids:
+        tiers.append(fetch("7TV channel %d" % sid, lambda sid=sid: _seventv_records(
+            ((_http_json("https://7tv.io/v3/users/twitch/%d" % sid) or {}).get("emote_set") or {}).get("emotes"))))
+    for sid in ids:
+        tiers.append(fetch("BTTV channel %d" % sid, lambda sid=sid: (lambda d: _bttv_records(
+            (d.get("channelEmotes") or []) + (d.get("sharedEmotes") or [])))(
+            _http_json("https://api.betterttv.net/3/cached/users/twitch/%d" % sid) or {})))
+    tiers.append(fetch("7TV global", lambda: _seventv_records(
+        (_http_json("https://7tv.io/v3/emote-sets/global") or {}).get("emotes"))))
+    tiers.append(fetch("BTTV global", lambda: _bttv_records(
+        _http_json("https://api.betterttv.net/3/cached/emotes/global"))))
+
+    if failures >= len(tiers):
+        print("error: every emote source failed — is the network up? Nothing was changed.")
+        return 1
+
+    chosen = {}
+    for recs in tiers:
+        for name, rec in recs:
+            if name not in chosen:
+                chosen[name] = rec
+
+    os.makedirs(EMOTE_DIR, exist_ok=True)
+    manifest = {}
+    downloaded = cached = errors = 0
+    for name in sorted(chosen):
+        rec = chosen[name]
+        fname = None
+        for url, ext in rec["urls"]:
+            cand = _emote_filename(name, ext)
+            dest = os.path.join(EMOTE_DIR, cand)
+            try:
+                if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+                    cached += 1
+                    fname = cand
+                    break
+            except OSError:
+                pass
+            try:
+                data = _http_bytes(url)
+            except Exception:
+                continue  # try the next candidate URL
+            tmp = "%s.%d.tmp" % (dest, os.getpid())
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(data)
+                os.replace(tmp, dest)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                continue
+            downloaded += 1
+            fname = cand
+            break
+        if fname is None:
+            errors += 1
+            continue
+        w, h = rec.get("w") or 0, rec.get("h") or 0
+        if not (w and h):
+            dims = _image_dims(os.path.join(EMOTE_DIR, fname))
+            w, h = dims if dims else (56, 56)
+        manifest[name] = {"file": fname, "w": w, "h": h,
+                          "scale": rec.get("scale") or 2, "zw": bool(rec.get("zw"))}
+        if (downloaded + cached) % 50 == 0:
+            print("  … %d downloaded, %d already cached" % (downloaded, cached))
+
+    # Hand-dropped files (e.g. a manually saved emote): stem = emote name,
+    # downloads win on collision, scale guessed from pixel height.
+    claimed = {m["file"] for m in manifest.values()}
+    hand = 0
+    for entry in sorted(os.scandir(EMOTE_DIR), key=lambda e: e.name):
+        stem, ext = os.path.splitext(entry.name)
+        if (not entry.is_file() or entry.name in claimed or not stem
+                or stem in manifest or entry.name.startswith(".")
+                or ext.lower() not in (".avif", ".webp", ".gif", ".png", ".jpg", ".jpeg")):
+            continue
+        w, h = _image_dims(entry.path) or (56, 56)
+        manifest[stem] = {"file": entry.name, "w": w, "h": h,
+                          "scale": 2 if h >= 56 else 1, "zw": False}
+        hand += 1
+
+    mpath = os.path.join(EMOTE_DIR, "manifest.json")
+    tmp = "%s.%d.tmp" % (mpath, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"version": 1, "emotes": manifest}, f)
+    os.replace(tmp, mpath)
+    print("synced %d emotes (%d downloaded, %d already cached, %d hand-added, %d failed) -> %s"
+          % (len(manifest), downloaded, cached, hand, errors, mpath))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="TwitchSync — local Twitch VOD player with synced chat")
     ap.add_argument("--dir", default=None,
                     help="the always-present library folder (default: this script's folder)")
     ap.add_argument("--port", type=int, default=8710)
     ap.add_argument("--no-open", action="store_true", help="don't open the browser automatically")
+    ap.add_argument("--sync-emotes", action="store_true",
+                    help="download BTTV/7TV emotes for the library's streamers into emote-cache/ and exit")
     args = ap.parse_args()
 
     root = os.path.realpath(args.dir or APP_DIR)
     if not os.path.isdir(root):
         sys.exit("error: not a directory: %s" % root)
+
+    if args.sync_emotes:
+        sys.exit(sync_emotes(Library(root)))
 
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)

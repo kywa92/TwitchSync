@@ -14,8 +14,9 @@ const show = (node, visible) => {
 };
 
 export class Player {
-  constructor(vod) {
+  constructor(vod, { onEnded } = {}) {
     this.vod = vod;
+    this.onEnded = onEnded;
     this.video = $("video");
     this.view = $("player-view");
     this.stage = $("stage");
@@ -33,6 +34,8 @@ export class Player {
     this.histCanvas = $("histogram");
     this.btnSpeed = $("btn-speed");
     this.speedMenu = $("speed-menu");
+    this.btnLoop = $("btn-loop");
+    this.btnAutoplay = $("btn-autoplay");
     this.btnMute = $("btn-mute");
     this.iconVol = $("icon-vol");
     this.iconVolOff = $("icon-vol-off");
@@ -76,6 +79,11 @@ export class Player {
     const saved = parseFloat(lsGet("ts.pos." + this.vod.stem));
     this._resumeTo = Number.isFinite(saved) && saved > 10 ? saved : null;
 
+    // Loop is per-open, never persisted; the <video> node outlives this Player.
+    v.loop = false;
+    this.btnLoop.classList.remove("active");
+    this.btnAutoplay.classList.toggle("active", lsGet("ts.autoplayNext") === "1");
+
     this._buildSpeedMenu();
     this._bind();
     this._onVolumeChange();
@@ -96,6 +104,8 @@ export class Player {
     this._listeners = [];
     const v = this.video;
     v.pause();
+    v.loop = false; // shared <video> node — never leak loop into the next open
+    this.btnLoop.classList.remove("active");
     v.removeAttribute("src");
     v.load(); // abort in-flight range requests
     // reset UI for the next open
@@ -108,6 +118,7 @@ export class Player {
     this.bigPlay.hidden = true;
     this.spinner.hidden = true;
     this.errorBox.hidden = true;
+    this.tooltip.hidden = true;
     this.toast.hidden = true;
     this.toast.classList.remove("show");
     this.speedMenu.hidden = true;
@@ -130,7 +141,19 @@ export class Player {
     this._on(v, "seeked", () => { this._renderBuffered(); this._updateSeekUI(); });
     this._on(v, "play", () => this._onPlayState());
     this._on(v, "pause", () => { this._onPlayState(); this._savePos(); });
-    this._on(v, "ended", () => { lsDel("ts.pos." + this.vod.stem); this._onPlayState(); });
+    this._on(v, "ended", () => {
+      // The <video> node is shared across opens, and a stray late 'ended' from
+      // the previous media can be delivered after this player attached its
+      // listeners (seen on huge NAS files near EOF). Only honor it when the
+      // clock really sits at the end of *this* player's media — otherwise it
+      // would wrongly clear the resume position and double-advance autoplay.
+      const d = this.dur;
+      if (!Number.isFinite(d) || v.currentTime < Math.max(0, d - 10)) return;
+      lsDel("ts.pos." + this.vod.stem);
+      this._onPlayState();
+      // A looping video never fires `ended`; the guard is pure defense.
+      if (!v.loop && this.onEnded) this.onEnded();
+    });
     this._on(v, "volumechange", () => this._onVolumeChange());
     this._on(v, "ratechange", () => this._onRateChange());
     this._on(v, "waiting", () => this._onWaiting());
@@ -145,6 +168,17 @@ export class Player {
     });
     this._on(this.stage, "dblclick", (e) => {
       if (e.target === v) this.toggleFullscreen();
+    });
+    this._on(this.btnLoop, "click", () => {
+      v.loop = !v.loop;
+      this.btnLoop.classList.toggle("active", v.loop);
+      this._showToast(v.loop ? "Loop on" : "Loop off");
+    });
+    this._on(this.btnAutoplay, "click", () => {
+      const on = lsGet("ts.autoplayNext") !== "1";
+      lsSet("ts.autoplayNext", on ? "1" : "0");
+      this.btnAutoplay.classList.toggle("active", on);
+      this._showToast(on ? "Autoplay next on" : "Autoplay next off");
     });
     this._on(this.btnMute, "click", () => this.toggleMute());
     this._on(this.volumeSlider, "input", () => {
@@ -347,8 +381,14 @@ export class Player {
     const rect = this.seekZone.getBoundingClientRect();
     const ratio = this._ratioFromEvent(e);
     this.tooltip.textContent = fmtTime(ratio * this.dur, this.dur >= 3600);
-    this.tooltip.style.left = (e.clientX - rect.left) + "px";
+    // Unhide before measuring ([hidden] is display:none, so offsetWidth reads 0),
+    // then clamp so the tooltip never pokes past the seek zone — during a captured
+    // drag e.clientX can be far outside the window, which used to grow the page
+    // and spawn scrollbars.
     this.tooltip.hidden = false;
+    const half = this.tooltip.offsetWidth / 2;
+    const x = Math.max(half, Math.min(e.clientX - rect.left, rect.width - half));
+    this.tooltip.style.left = x + "px";
   }
 
   _updateScrubUI(e) {
@@ -479,6 +519,8 @@ export class Player {
     this.errorBox.textContent = msgs[this.video.error.code] || "Playback error.";
     this.errorBox.hidden = false;
   }
+
+  showToast(text) { this._showToast(text); }
 
   _showToast(text) {
     this.toast.textContent = text;

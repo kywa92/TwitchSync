@@ -12,6 +12,10 @@ example.png
 # Python bytecode
 __pycache__/
 
+# runtime caches (rebuilt by --sync-emotes / the thumbnail generator)
+/emote-cache/
+/thumb-cache/
+
 /docs
 
 folders.json

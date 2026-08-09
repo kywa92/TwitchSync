@@ -1,10 +1,11 @@
 // Library picker view: the VOD list plus the library-folder manager.
 
-import { el, fmtTime, fmtBytes, fmtDate } from "./util.js";
+import { el, fmtTime, fmtBytes, fmtDate, lsGet, lsSet } from "./util.js";
+import { resetThumbs, registerThumbImg, queueThumb } from "./thumbs.js";
 
 const $ = (id) => document.getElementById(id);
 
-let handlers = { onOpen: () => {}, onRefresh: () => {} };
+let handlers = { onOpen: () => {}, onRefresh: () => {}, onSortChange: () => {} };
 let bound = false;
 
 export function setupLibrary(h) {
@@ -22,16 +23,53 @@ export function setupLibrary(h) {
   $("folder-path").addEventListener("keydown", (e) => {
     if (e.key === "Enter") addFolder();
   });
+
+  $("sort-new").addEventListener("click", () => handlers.onSortChange("new"));
+  $("sort-old").addEventListener("click", () => handlers.onSortChange("old"));
+  $("autoplay-next").addEventListener("change", (e) => {
+    lsSet("ts.autoplayNext", e.target.checked ? "1" : "0");
+  });
+}
+
+// The player's autoplay button writes the same localStorage keys, so re-read
+// them on every render to keep the toolbar honest.
+function syncToolbar() {
+  const dir = lsGet("ts.sort") === "old" ? "old" : "new";
+  $("sort-new").classList.toggle("active", dir === "new");
+  $("sort-old").classList.toggle("active", dir === "old");
+  $("autoplay-next").checked = lsGet("ts.autoplayNext") === "1";
 }
 
 export function renderLibrary(vods, multipleFolders) {
   const list = $("vod-list");
   list.textContent = "";
   $("lib-empty").hidden = vods.length > 0;
+  syncToolbar();
+  resetThumbs();
 
+  const lastPlayed = lsGet("ts.lastPlayed");
   for (const vod of vods) {
     const btn = el("button", "vod-btn");
-    btn.append(el("div", "vod-title", vod.title));
+
+    const thumbBox = el("div", "vod-thumb-box");
+    const img = new Image();
+    img.className = "vod-thumb";
+    img.alt = "";
+    // Eager on purpose: lazy-loading stalls entirely in hidden/background tabs
+    // (Chrome defers lazy images while document.hidden), which would freeze
+    // thumbnail generation. The queue's concurrency cap is the real throttle.
+    img.decoding = "async";
+    img.addEventListener("load", () => img.classList.add("ready"));
+    img.addEventListener("error", () => queueThumb(vod));
+    registerThumbImg(vod, img);
+    img.src = "/thumb?v=" + encodeURIComponent(vod.id);
+    thumbBox.append(img);
+    btn.append(thumbBox);
+
+    const body = el("div", "vod-body");
+    const title = el("div", "vod-title", vod.title);
+    if (lastPlayed && lastPlayed === vod.id) title.append(el("span", "vod-chip", "Last played"));
+    body.append(title);
     const meta = [
       vod.streamer,
       vod.game,
@@ -39,12 +77,23 @@ export function renderLibrary(vods, multipleFolders) {
       fmtBytes(vod.sizeBytes),
       fmtDate(vod.mtime),
     ].filter(Boolean).join(" • ");
-    btn.append(el("div", "vod-meta", meta));
+    body.append(el("div", "vod-meta", meta));
     // Only worth showing where a VOD lives once there's more than one folder.
     if (multipleFolders) {
       const where = vod.folder ? `${vod.rootLabel} / ${vod.folder}` : vod.rootLabel;
-      btn.append(el("div", "vod-where", where));
+      body.append(el("div", "vod-where", where));
     }
+    btn.append(body);
+
+    const pos = parseFloat(lsGet("ts.pos." + vod.stem));
+    if (Number.isFinite(pos) && vod.durationSec > 0) {
+      const bar = el("div", "vod-progress");
+      const fill = el("div", "vod-progress-fill");
+      fill.style.width = Math.min(100, (pos / vod.durationSec) * 100) + "%";
+      bar.append(fill);
+      btn.append(bar);
+    }
+
     btn.addEventListener("click", () => handlers.onOpen(vod));
 
     const li = el("li");

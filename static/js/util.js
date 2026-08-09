@@ -55,6 +55,36 @@ export function readableColor(hex) {
   return "#" + hx(lift(r)) + hx(lift(g)) + hx(lift(b));
 }
 
+// VOD stems start with a bracketed stream date: "[M-D-YY] streamer - title",
+// month first, not zero-padded, optionally "[..]-N" for the Nth stream that day.
+const STEM_DATE_RE = /^\[(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})\](?:-(\d{1,3}))?/;
+
+export function parseStemDate(stem) {
+  const m = STEM_DATE_RE.exec(stem || "");
+  if (!m) return null;
+  let mo = parseInt(m[1], 10);
+  let day = parseInt(m[2], 10);
+  if (mo > 12 && day <= 12) [mo, day] = [day, mo]; // tolerate day-first names
+  const year = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
+  const dt = new Date(year, mo - 1, day);
+  // Reject rollover ("[2-30-26]" must not become Mar 2 — fall back to mtime).
+  if (dt.getFullYear() !== year || dt.getMonth() !== mo - 1 || dt.getDate() !== day) return null;
+  return { t: dt.getTime(), seq: m[4] ? parseInt(m[4], 10) : 0 };
+}
+
+// Sort by stream date from the filename (mtime is only a download timestamp),
+// falling back to mtime for stems without a parseable date prefix.
+export function sortVods(vods, dir) {
+  const keyed = vods.map((v) => {
+    const p = parseStemDate(v.stem);
+    return { v, t: p ? p.t : v.mtime * 1000, seq: p ? p.seq : 0 };
+  });
+  keyed.sort((a, b) =>
+    (a.t - b.t) || (a.seq - b.seq) || (a.v.mtime - b.v.mtime) || a.v.id.localeCompare(b.v.id));
+  if (dir !== "old") keyed.reverse();
+  return keyed.map((k) => k.v);
+}
+
 // First index i with arr[i] > x (arr ascending).
 export function upperBound(arr, x) {
   let lo = 0, hi = arr.length;

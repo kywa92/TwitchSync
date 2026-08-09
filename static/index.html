@@ -35,6 +35,14 @@
     </div>
   </section>
 
+  <div id="lib-toolbar">
+    <div id="sort-seg" role="group" aria-label="Sort order">
+      <button id="sort-new" class="seg-btn">Newest first</button>
+      <button id="sort-old" class="seg-btn">Oldest first</button>
+    </div>
+    <label id="autoplay-label"><input id="autoplay-next" type="checkbox"> Autoplay next</label>
+  </div>
+
   <div id="lib-notice" hidden></div>
   <ul id="vod-list"></ul>
   <div id="lib-empty" hidden>
@@ -96,6 +104,12 @@
         <span id="time-cur">0:00</span><span class="time-sep"> / </span><span id="time-dur">0:00</span>
       </span>
       <span class="spacer"></span>
+      <button id="btn-autoplay" class="ctl-btn" title="Autoplay next video">
+        <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/></svg>
+      </button>
+      <button id="btn-loop" class="ctl-btn" title="Loop video">
+        <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+      </button>
       <div id="speed-wrap">
         <button id="btn-speed" class="ctl-btn" title="Playback speed">1×</button>
         <div id="speed-menu" hidden></div>
