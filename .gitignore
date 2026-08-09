@@ -7,7 +7,7 @@ example.png
 .DS_Store
 
 # local session config
-.claude/
+/.claude/
 
 # Python bytecode
 __pycache__/
