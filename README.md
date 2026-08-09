@@ -2,7 +2,7 @@
 
 
 # TwitchSync
-A browser based web app that allows rich playback of Twitch VODs and JSON chat logs that are downloaded using the open source [TwitchDownloader](https://github.com/lay295/TwitchDownloader) tool (CLI or GUI).
+A browser based web app (naturally cross platform) that allows rich playback of Twitch VODs and JSON chat logs that are downloaded using the open source [TwitchDownloader](https://github.com/lay295/TwitchDownloader) tool (CLI or GUI).
 
 **📖 Full documentation:** open [USER_GUIDE.html](USER_GUIDE.html) in a browser — a detailed
 guide to setup, the library, every player control, and troubleshooting.
@@ -23,12 +23,12 @@ Then open http://127.0.0.1:8710/ (it opens automatically unless `--no-open`).
 Options: `--dir PATH` to serve a different VOD folder (default: this folder),
 `--port N` (default 8710), `--no-open`.
 
-Requires Python 3 only — no dependencies, no build step.
+Requires Python 3 only. No dependancies. No build needed. 
 
 ## Library folders
 
-The project folder is always scanned. To watch VODs stored elsewhere — a NAS
-share, an external drive — mount it (Finder → *Connect to Server*), then click
+The project folder is always scanned. To watch VODs stored elsewhere like a NAS
+share, an external drive etc, mount it (Finder → *Connect to Server*), then click
 **Folders** on the library page and add its path, e.g. `/Volumes/MyNAS/VODs`.
 Added folders are remembered in `folders.json`, scanned up to four levels deep,
 and everything appears in one combined library. Removing a folder never touches
