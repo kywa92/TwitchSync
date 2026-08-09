@@ -1,3 +1,6 @@
+<img width="370" height="71" align="center" alt="title" src="https://github.com/user-attachments/assets/3e291afb-e9af-4b16-b4d5-f15b6ba10358" />
+
+
 # TwitchSync
 A browser based web app that allows rich playback of Twitch VODs and JSON chat logs
 
@@ -11,6 +14,9 @@ column on the right, and one set of controls at the bottom. Chat is rendered in
 HTML straight from the chat JSON and driven by the video clock, so scrubbing
 anywhere instantly shows the chat from that moment — no re-encoding, and the
 `" - CHAT"` video renders are not needed.
+
+<img width="500" height="" alt="screenshot4" src="https://github.com/user-attachments/assets/edb2f19f-7f37-4d63-b419-7c2ba3bf0c9a" />
+
 
 ## Run
 
