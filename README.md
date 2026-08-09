@@ -65,6 +65,9 @@ in the filename is ignored.
 - Chat text is selectable; animated emotes (GIF/WebP) animate; zero-width
   emotes overlay their base emote as on Twitch.
 
+## Emotes
+`python3 server.py --sync-emotes` downloads the 7TV + BTTV channel sets for every streamer found in your library plus both global sets into emote-cache/, then writes a manifest. Chat playback now fills in any emote missing from a VOD's embedded data. Playback stays fully offline; the network is only touched by that explicit command, which you can re-run anytime (it skips files it already has).
+
 ## How it works
 
 `server.py` (stdlib only) serves the frontend plus two data routes:
