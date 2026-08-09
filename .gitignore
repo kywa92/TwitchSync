@@ -12,3 +12,5 @@ DEVELOPMENT_SUMMARY.html
 
 # Python bytecode
 __pycache__/
+
+/docs
