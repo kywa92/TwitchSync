@@ -62,6 +62,12 @@ in the filename is ignored.
 ## Emotes
 `python3 server.py --sync-emotes` downloads the 7TV + BTTV channel sets for every streamer found in your library plus both global sets into emote-cache/, then writes a manifest. Chat playback now fills in any emote missing from a VOD's embedded data. Playback stays fully offline; the network is only touched by that explicit command, which you can re-run anytime (it skips files it already has).
 
+## Thumbnails
+Thumbnails are extracted server-side with ffmpeg (`brew install ffmpeg`) and cached in thumb-cache/, so a library only pays for them once. `python3 server.py --sync-thumbs` generates every missing one up front and prunes cache files whose VOD changed or vanished. Without ffmpeg the app falls back to capturing frames in the browser, which still works but is slower and makes macOS click its audio device once per thumbnail.
+
+## Checking chat files
+Same filename does not guarantee same stream: a partial or mis-filed download can leave an MP4 paired with a chat JSON from a different (usually shorter) stream. On every start the server checks each pair in the background — comparing the chat file's declared video length against the MP4's real duration, and flagging a chat log that stops long before the video ends — and marks anything suspect with an amber **CHECK** badge in the library plus a count in the toolbar. Results are cached in chat-check.json and keyed to both files, so only new or changed VODs are re-checked. `python3 server.py --check-chat` re-runs the whole thing from scratch and prints a per-VOD report. Needs ffprobe (same Homebrew package as ffmpeg); without it the check is skipped entirely.
+
 ## How it works
 
 `server.py` (stdlib only) serves the frontend plus two data routes:

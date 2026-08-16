@@ -6,6 +6,16 @@ import { fmtTime, el, lsGet, lsSet, lsDel } from "./util.js";
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const $ = (id) => document.getElementById(id);
 
+// Automatic recovery from decode/network MediaErrors: reload the same src and
+// resume, skipping progressively further past the failure point when the error
+// keeps recurring in the same region. The delay ladder lets transient outages
+// (server restart, NAS reconnect) come back instead of burning every attempt
+// against a dead socket in the first second.
+const RECOVER_SKIPS = [0, 1, 2, 5, 10, 30]; // seconds ahead of the failure point
+const RECOVER_DELAYS = [300, 600, 1200, 2500, 4000, 6000]; // ms before each reload
+const RECOVER_REGION = 5;  // errors within ±5 s count as "the same spot"
+const RECOVER_STABLE = 30; // seconds of clean playback that reset the ladder
+
 // SVGElement has no `hidden` IDL property, so toggle the attribute (which the
 // CSS [hidden] rule matches) for the inline SVG icons.
 const show = (node, visible) => {
@@ -45,6 +55,9 @@ export class Player {
     this.spinner = $("spinner");
     this.errorBox = $("video-error");
     this.toast = $("toast");
+    this.muteLayer = $("seek-muted-layer");
+    this.muteNotice = $("mute-notice");
+    this.muteLink = $("mute-skip");
 
     this._listeners = [];
     this._bufDivs = [];
@@ -57,6 +70,25 @@ export class Player {
     this._idleTimer = null;
     this._spinTimer = null;
     this._toastTimer = null;
+    // muted-audio segments (from /api/muted)
+    this._muteDivs = [];
+    this._muteSegs = null;
+    this._muteIdx = -1;
+    this._muteSkipTo = 0;
+    this._mutePollTimer = null;
+    // error-recovery state
+    this._lastTime = 0;      // last real currentTime — the element reports 0 after a failed reload
+    // Whether the USER wants playback running. Updated only at user-intent
+    // boundaries (start/togglePlay/bigPlay), never from element events: the
+    // browser pauses the element itself on fatal errors and during reloads,
+    // and those synthetic pauses must not stop recovery from resuming.
+    this._intentPlaying = false;
+    this._recoverTo = null;  // seek target once the recovery reload has metadata
+    this._recoverSkip = 0;
+    this._recoverAttempts = 0;
+    this._recoverRegion = null;
+    this._recoverResetAt = null;
+    this._recoverTimer = null;
   }
 
   // Duration for display/seek math: real metadata once loaded, listing value before.
@@ -87,8 +119,10 @@ export class Player {
     this._buildSpeedMenu();
     this._bind();
     this._onVolumeChange();
+    this._loadMuted();
 
     v.src = "/media?v=" + encodeURIComponent(this.vod.id);
+    this._intentPlaying = true;
     v.play().catch(() => {
       if (!this._destroyed) this.bigPlay.hidden = false;
     });
@@ -100,6 +134,10 @@ export class Player {
     clearTimeout(this._idleTimer);
     clearTimeout(this._spinTimer);
     clearTimeout(this._toastTimer);
+    // Shared <video> node: a pending recovery reload must never fire after
+    // the next Player has attached.
+    clearTimeout(this._recoverTimer);
+    clearTimeout(this._mutePollTimer);
     for (const [t, type, fn, opts] of this._listeners) t.removeEventListener(type, fn, opts);
     this._listeners = [];
     const v = this.video;
@@ -113,6 +151,11 @@ export class Player {
     this.seekHandle.style.left = "0%";
     for (const d of this._bufDivs) d.remove();
     this._bufDivs = [];
+    for (const d of this._muteDivs) d.remove();
+    this._muteDivs = [];
+    this._muteSegs = null;
+    this._muteIdx = -1;
+    this.muteNotice.hidden = true;
     const ctx = this.histCanvas.getContext("2d");
     ctx && ctx.clearRect(0, 0, this.histCanvas.width, this.histCanvas.height);
     this.bigPlay.hidden = true;
@@ -138,7 +181,7 @@ export class Player {
     this._on(v, "loadedmetadata", () => this._onLoadedMetadata());
     this._on(v, "timeupdate", () => this._onTimeUpdate());
     this._on(v, "progress", () => this._renderBuffered());
-    this._on(v, "seeked", () => { this._renderBuffered(); this._updateSeekUI(); });
+    this._on(v, "seeked", () => { this._renderBuffered(); this._updateSeekUI(); this._checkMuted(); });
     this._on(v, "play", () => this._onPlayState());
     this._on(v, "pause", () => { this._onPlayState(); this._savePos(); });
     this._on(v, "ended", () => {
@@ -162,7 +205,11 @@ export class Player {
     this._on(v, "error", () => this._onError());
 
     this._on(this.btnPlay, "click", () => this.togglePlay());
-    this._on(this.bigPlay, "click", () => { this.bigPlay.hidden = true; v.play().catch(() => {}); });
+    this._on(this.bigPlay, "click", () => {
+      this.bigPlay.hidden = true;
+      this._intentPlaying = true;
+      v.play().catch(() => {});
+    });
     this._on(this.stage, "click", (e) => {
       if (e.target === v) this.togglePlay();
     });
@@ -179,6 +226,10 @@ export class Player {
       lsSet("ts.autoplayNext", on ? "1" : "0");
       this.btnAutoplay.classList.toggle("active", on);
       this._showToast(on ? "Autoplay next on" : "Autoplay next off");
+    });
+    this._on(this.muteLink, "click", (e) => {
+      e.preventDefault();
+      this._seekTo(this._muteSkipTo); // jump to where the audio comes back
     });
     this._on(this.btnMute, "click", () => this.toggleMute());
     this._on(this.volumeSlider, "input", () => {
@@ -206,8 +257,10 @@ export class Player {
     const v = this.video;
     if (v.paused) {
       this.bigPlay.hidden = true;
+      this._intentPlaying = true;
       v.play().catch(() => {});
     } else {
+      this._intentPlaying = false;
       v.pause();
     }
   }
@@ -231,16 +284,42 @@ export class Player {
       this._showToast("Resumed at " + fmtTime(this._resumeTo, this.dur >= 3600));
     }
     this._resumeTo = null;
+    // A recovery reload just got its metadata back: jump to where playback
+    // died (plus any skip) and resume if it was playing.
+    if (this._recoverTo != null) {
+      const d = this.dur;
+      const t = Number.isFinite(d) ? Math.min(this._recoverTo, Math.max(0, d - 0.5)) : this._recoverTo;
+      this.video.currentTime = Math.max(0, t);
+      this._showToast(this._recoverSkip > 0
+        ? "Recovered playback — skipped " + this._recoverSkip + "s"
+        : "Recovered playback");
+      this._recoverTo = null;
+      if (this._intentPlaying) {
+        this.video.play().catch(() => {
+          if (!this._destroyed) this.bigPlay.hidden = false;
+        });
+      }
+    }
+    this._renderMuted(); // segments may have arrived before the metadata did
     this._updateSeekUI();
   }
 
   _onTimeUpdate() {
     if (this._destroyed) return;
+    const t = this.video.currentTime;
+    if (Number.isFinite(t) && t > 0) this._lastTime = t;
+    // Clean playback past the trouble spot re-arms the full recovery ladder.
+    if (this._recoverAttempts && this._recoverResetAt != null && t > this._recoverResetAt) {
+      this._recoverAttempts = 0;
+      this._recoverRegion = null;
+      this._recoverResetAt = null;
+    }
     if (!this._scrubbing) {
       this.timeCur.textContent = fmtTime(this.video.currentTime, this.dur >= 3600);
       this._updateSeekUI();
       this._renderBuffered();
     }
+    this._checkMuted();
     const now = performance.now();
     if (now - this._lastSave > 5000) {
       this._savePos();
@@ -335,6 +414,74 @@ export class Player {
         div.hidden = true;
       }
     }
+  }
+
+  // ---- muted-audio segments ----------------------------------------------
+  // Twitch mutes copyrighted stretches; the server detects them with ffmpeg
+  // and caches per file (/api/muted). Marked light red on the seek track, and
+  // while the playhead is inside one a notice above the controls links to
+  // where the audio returns.
+
+  async _loadMuted() {
+    let data = null;
+    try {
+      const res = await fetch("/api/muted?v=" + encodeURIComponent(this.vod.id));
+      if (res.ok) data = await res.json();
+    } catch { /* server unreachable — same as unavailable */ }
+    if (this._destroyed || !data) return;
+    if (data.status === "ok" && Array.isArray(data.segments)) {
+      this._muteSegs = data.segments
+        .filter((s) => Array.isArray(s) && Number.isFinite(s[0]) && Number.isFinite(s[1]) && s[1] > s[0])
+        .sort((a, b) => a[0] - b[0]);
+      this._renderMuted();
+      this._checkMuted();
+    } else if (data.status === "pending") {
+      // The scan is queued — this request just bumped it to the front of the
+      // server's queue, and each re-poll keeps it there.
+      this._mutePollTimer = setTimeout(() => this._loadMuted(), 30000);
+    }
+    // "unavailable" (no ffmpeg / pre-mute-scan server): nothing to show
+  }
+
+  _renderMuted() {
+    if (this._destroyed || !this._muteSegs) return;
+    const d = this.dur;
+    if (!Number.isFinite(d) || d <= 0) return;
+    while (this._muteDivs.length < this._muteSegs.length) {
+      const div = el("div", "seek-muted-seg");
+      this.muteLayer.append(div);
+      this._muteDivs.push(div);
+    }
+    for (let i = 0; i < this._muteDivs.length; i++) {
+      const div = this._muteDivs[i];
+      const seg = this._muteSegs[i];
+      if (seg) {
+        div.style.left = (seg[0] / d * 100) + "%";
+        div.style.width = ((seg[1] - seg[0]) / d * 100) + "%";
+        div.hidden = false;
+      } else {
+        div.hidden = true;
+      }
+    }
+  }
+
+  _checkMuted() {
+    if (this._destroyed || !this._muteSegs || !this._muteSegs.length) return;
+    const t = this.video.currentTime;
+    let idx = -1;
+    for (let i = 0; i < this._muteSegs.length; i++) {
+      if (t >= this._muteSegs[i][0] && t < this._muteSegs[i][1]) { idx = i; break; }
+    }
+    if (idx === this._muteIdx) return;
+    this._muteIdx = idx;
+    if (idx < 0) {
+      this.muteNotice.hidden = true;
+      return;
+    }
+    const end = this._muteSegs[idx][1];
+    this._muteSkipTo = end + 0.5;
+    this.muteLink.textContent = fmtTime(end, true);
+    this.muteNotice.hidden = false;
   }
 
   _ratioFromEvent(e) {
@@ -509,15 +656,55 @@ export class Player {
 
   _onError() {
     if (this._destroyed || !this.video.error) return;
+    const code = this.video.error.code;
     const msgs = {
       1: "Playback aborted.",
       2: "Network error while loading the video.",
       3: "The video could not be decoded.",
       4: "This video format is not supported by the browser.",
     };
+    // Decode (3) and network (2) errors are usually transient — one corrupt
+    // packet, a dropped NAS/server connection — so recover instead of
+    // dead-ending playback. Code 4 is only retried once the file has provably
+    // played (browsers report a refused connection as "not supported"); a
+    // fresh code 4 really is an unsupported file. Code 1 stays fatal.
+    const retriable = code === 2 || code === 3 || (code === 4 && this._lastTime > 0);
+    if (retriable && this._beginRecovery()) return;
     this.spinner.hidden = true;
-    this.errorBox.textContent = msgs[this.video.error.code] || "Playback error.";
+    this.errorBox.textContent = msgs[code] || "Playback error.";
     this.errorBox.hidden = false;
+  }
+
+  // One rung of the recovery ladder. False = attempts exhausted (caller shows
+  // the plain error box).
+  _beginRecovery() {
+    const v = this.video;
+    const cur = v.currentTime;
+    const pos = Number.isFinite(cur) && cur > 0 ? cur : this._lastTime;
+    if (this._recoverRegion != null && Math.abs(pos - this._recoverRegion) <= RECOVER_REGION) {
+      this._recoverAttempts++;
+    } else {
+      this._recoverRegion = pos;
+      this._recoverAttempts = 1;
+    }
+    if (this._recoverAttempts > RECOVER_SKIPS.length) return false;
+    const skip = RECOVER_SKIPS[this._recoverAttempts - 1];
+    this._recoverSkip = skip;
+    this._recoverTo = pos + skip;
+    this._recoverResetAt = pos + skip + RECOVER_STABLE;
+    // Directly — _onWaiting's delayed spinner refuses to show while the
+    // element reports paused, which an errored element may.
+    this.spinner.hidden = false;
+    this.errorBox.hidden = true;
+    clearTimeout(this._recoverTimer);
+    this._recoverTimer = setTimeout(() => {
+      if (this._destroyed) return;
+      // Same URL; re-setting src resets the element's error state and
+      // restarts resource selection from scratch.
+      this.video.src = "/media?v=" + encodeURIComponent(this.vod.id);
+      this.video.load();
+    }, RECOVER_DELAYS[this._recoverAttempts - 1]);
+    return true;
   }
 
   showToast(text) { this._showToast(text); }

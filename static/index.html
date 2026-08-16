@@ -10,6 +10,7 @@
 <body>
 
 <div id="library-view">
+  <div id="version-tag" hidden></div>
   <header class="lib-header">
     <img id="lib-logo" src="/icon.png" alt="">
     <div class="lib-title">
@@ -36,20 +37,47 @@
   </section>
 
   <div id="lib-toolbar">
-    <div id="sort-seg" role="group" aria-label="Sort order">
-      <button id="sort-new" class="seg-btn">Newest first</button>
-      <button id="sort-old" class="seg-btn">Oldest first</button>
+    <div id="sort-wrap">
+      <label class="toolbar-label" for="sort-by">Sort by</label>
+      <select id="sort-by" title="Sort by">
+        <option value="date">Date</option>
+        <option value="size">File size</option>
+        <option value="duration">Duration</option>
+        <option value="streamer">Streamer</option>
+        <option value="game">Game</option>
+      </select>
+      <button id="sort-dir" class="ghost-btn" title="Toggle sort direction">↓</button>
     </div>
+    <div class="filter-wrap">
+      <button id="filter-streamers-btn" class="ghost-btn filter-btn">Streamer<span class="filter-count" hidden></span></button>
+      <div id="filter-streamers-pop" class="filter-pop" hidden></div>
+    </div>
+    <div class="filter-wrap">
+      <button id="filter-games-btn" class="ghost-btn filter-btn">Game<span class="filter-count" hidden></span></button>
+      <div id="filter-games-pop" class="filter-pop" hidden></div>
+    </div>
+    <button id="reset-history" class="ghost-btn" hidden>Reset history</button>
+    <button id="chat-check-status" class="ghost-btn" hidden></button>
     <label id="autoplay-label"><input id="autoplay-next" type="checkbox"> Autoplay next</label>
   </div>
 
   <div id="lib-notice" hidden></div>
   <ul id="vod-list"></ul>
+  <div id="filter-empty" hidden>
+    <p>No VODs match the current filters.</p>
+    <button id="filter-clear" class="ghost-btn">Clear filters</button>
+  </div>
   <div id="lib-empty" hidden>
     <p>No VODs found.</p>
     <p class="dim">Drop a TwitchDownloader <code>.mp4</code> and its matching <code>.json</code>
     into the project folder — or add another folder above — then refresh.</p>
   </div>
+  <section id="orphan-section" hidden>
+    <h2>Unpaired files</h2>
+    <p class="dim">These have a VOD date stamp but are missing their other half.
+    Videos still play — without a chat pane.</p>
+    <ul id="orphan-list"></ul>
+  </section>
 </div>
 
 <div id="player-view" hidden>
@@ -84,18 +112,23 @@
   </aside>
 
   <div id="controls">
+    <div id="mute-notice" hidden><span>source audio muted until </span><a href="#" id="mute-skip"></a></div>
     <div id="seek-row">
       <canvas id="histogram"></canvas>
       <div id="seek-zone">
         <div id="seek-track">
           <div id="seek-buffered-layer"></div>
           <div id="seek-fill"></div>
+          <div id="seek-muted-layer"></div>
         </div>
         <div id="seek-handle"></div>
         <div id="seek-tooltip" hidden>0:00</div>
       </div>
     </div>
     <div id="buttons-row">
+      <button id="back-btn-ctl" class="ctl-btn" title="Back to library">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
       <button id="btn-play" class="ctl-btn" title="Play/pause (space)">
         <svg id="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         <svg id="icon-pause" viewBox="0 0 24 24" hidden><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
@@ -123,6 +156,16 @@
         <svg id="icon-fs" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
         <svg id="icon-fs-exit" viewBox="0 0 24 24" hidden><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
       </button>
+    </div>
+  </div>
+</div>
+
+<div id="confirm-overlay" hidden>
+  <div id="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-msg">
+    <p id="confirm-msg"></p>
+    <div id="confirm-actions">
+      <button id="confirm-cancel" class="ghost-btn">Cancel</button>
+      <button id="confirm-yes" class="danger-btn">Yes</button>
     </div>
   </div>
 </div>

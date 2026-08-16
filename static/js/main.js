@@ -1,55 +1,147 @@
 // Bootstrap: routing between the library picker and the player, lifecycle.
 
-import { setupLibrary, renderLibrary, renderFolders, showNotice } from "./library.js";
+import { setupLibrary, renderLibrary, renderOrphans, renderFolders, showNotice,
+         setChatCheck, renderCheckChip, scrollToVod } from "./library.js";
 import { Player } from "./player.js";
 import { Chat } from "./chat.js";
-import { sortVods, lsGet, lsSet } from "./util.js";
-import { setThumbsPaused } from "./thumbs.js";
+import { sortVods, currentSortBy, currentSortDir, distinctFilterValues,
+         vodMatchesFilters, readFilter, fmtDate, lsGet, lsSet } from "./util.js";
+import { setThumbsPaused, setThumbsServerGen } from "./thumbs.js";
 
 const state = {
   vods: [],    // server order (mtime desc) — findVod's domain
   sorted: [],  // current display order — what the library renders and autoplay walks
+  orphans: [], // date-stamped mp4/json files missing their other half
   folderCount: 1,
   player: null,
   chat: null,
   current: null,
   pushedFromLibrary: false,
+  checkKey: "",         // identity of the flag set we last received
+  renderedCheckKey: "", // ...and the one currently painted into the list
 };
 
-const currentSort = () => (lsGet("ts.sort") === "old" ? "old" : "new");
+let checkTimer = null;
 
 const libraryView = document.getElementById("library-view");
 const playerView = document.getElementById("player-view");
 
+// Effective filter selections: stored values intersected with what actually
+// exists in the current library, so a selection referencing only an offline
+// NAS's streamers degrades to "show all" instead of an empty page.
+function currentFilters() {
+  const avail = distinctFilterValues(state.vods);
+  const eff = (kind) => {
+    const have = new Set(avail[kind].map((r) => r.name.toLowerCase()));
+    return new Set(readFilter(kind).map((s) => s.toLowerCase()).filter((s) => have.has(s)));
+  };
+  return { streamers: eff("streamers"), games: eff("games") };
+}
+
+function filterVods(vods) {
+  const sel = currentFilters();
+  if (!sel.streamers.size && !sel.games.size) return vods;
+  return vods.filter((v) => vodMatchesFilters(v, sel));
+}
+
+function resort() {
+  state.sorted = sortVods(filterVods(state.vods), currentSortDir(), currentSortBy());
+}
+
 async function fetchAll() {
-  const [vods, folders] = await Promise.all([
-    fetch("/api/videos").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+  const [raw, folders] = await Promise.all([
+    fetch("/api/videos").then((r) => (r.ok ? r.json() : null)).catch(() => null),
     fetch("/api/folders").then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]);
-  state.vods = vods;
-  state.sorted = sortVods(state.vods, currentSort());
+  // {videos, thumbGen, chatCheck} envelope; tolerate the pre-envelope bare array.
+  setThumbsServerGen(!!(raw && raw.thumbGen));
+  applyCheck(raw && raw.chatCheck, 1500);
+  setVersionTag(raw);
+  state.vods = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.videos) ? raw.videos : []);
+  state.orphans = raw && Array.isArray(raw.orphans) ? raw.orphans : [];
+  resort();
   state.folderCount = folders && folders.folders ? folders.folders.length : 1;
   return folders;
+}
+
+// "v1.1 · Aug 12, 2026" at the page's top right; the server derives the date
+// from its source files' mtimes at startup.
+function setVersionTag(raw) {
+  if (!raw || !raw.version) return; // older server — leave the tag hidden
+  const tag = document.getElementById("version-tag");
+  tag.textContent = "v" + raw.version +
+    (raw.buildMtime ? " · " + fmtDate(raw.buildMtime) : "");
+  tag.hidden = false;
+}
+
+// Every render records which flag set it painted, so the check poll can tell
+// whether a re-render is actually needed.
+function render() {
+  state.renderedCheckKey = state.checkKey;
+  renderLibrary(state.sorted, state.folderCount > 1, state.vods.length);
+  renderOrphans(state.orphans, state.folderCount > 1,
+                (o) => openVod(orphanToVod(o), { push: true }));
+}
+
+// A playable orphan mp4 dressed as a vod: title from the filename, duration
+// left to the video element, and isOrphan drives the chat-less player mode.
+function orphanToVod(o) {
+  return {
+    id: o.id, stem: o.stem, title: o.stem, streamer: "", game: "",
+    durationSec: null, sizeBytes: o.sizeBytes, mtime: o.mtime, chapters: [],
+    rootId: o.rootId, rootLabel: o.rootLabel, folder: o.folder,
+    isOrphan: true,
+  };
 }
 
 async function refreshLibrary() {
   const folders = await fetchAll();
   if (folders) renderFolders(folders);
-  renderLibrary(state.sorted, state.folderCount > 1);
+  render();
+}
+
+// The chat/VOD check runs in a background thread on the server and finishes
+// well after the first page load, so poll until it's done. Deliberately does
+// NOT re-render on every poll: renderLibrary rebuilds every <img>, which would
+// re-drive thumbnail generation each time. Only the toolbar chip updates until
+// the flag set actually changes.
+function applyCheck(d, delay) {
+  if (!d || typeof d !== "object") return; // older server — leave the UI alone
+  state.checkKey = JSON.stringify(d.flagged || {});
+  setChatCheck(d);
+  clearTimeout(checkTimer);
+  checkTimer = d.checking ? setTimeout(pollCheck, delay) : null;
+}
+
+async function pollCheck() {
+  checkTimer = null;
+  const d = await fetch("/api/chat-check")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (!d) return; // server gone — stop quietly rather than retrying forever
+  applyCheck(d, 3000);
+  if (!d.checking && state.checkKey !== state.renderedCheckKey) render();
+  else renderCheckChip();
 }
 
 function findVod(id) {
   // Bookmarks made before multi-folder support carried the bare stem.
-  return state.vods.find((v) => v.id === id) || state.vods.find((v) => v.stem === id) || null;
+  const vod = state.vods.find((v) => v.id === id) || state.vods.find((v) => v.stem === id);
+  if (vod) return vod;
+  // Deep links / reloads on ?v=orphan:… — only mp4 orphans are playable.
+  const o = state.orphans.find((x) => x.id === id && x.kind === "mp4");
+  return o ? orphanToVod(o) : null;
 }
 
 function showLibrary(notice) {
+  // Every caller has already rendered the library (refreshLibrary or the
+  // explicit render in backToLibrary) — rendering here too would double every
+  // thumbnail fetch per page load.
   playerView.hidden = true;
   libraryView.hidden = false;
   document.title = "TwitchSync";
   showNotice(notice);
   setThumbsPaused(false);
-  renderLibrary(state.sorted, state.folderCount > 1);
 }
 
 function openVod(vod, { push = false, replace = false } = {}) {
@@ -69,12 +161,15 @@ function openVod(vod, { push = false, replace = false } = {}) {
   playerView.hidden = false;
   document.title = vod.title + " — TwitchSync";
 
+  // Orphan mp4s have no chat file: hide the chat column entirely (the chat
+  // may already be burned into the video) and skip the Chat instance.
+  playerView.classList.toggle("no-chat", !!vod.isOrphan);
   state.player = new Player(vod, { onEnded: () => playNext(vod) });
-  state.chat = new Chat(vod, state.player.video, {
+  state.chat = vod.isOrphan ? null : new Chat(vod, state.player.video, {
     onHistogram: (buckets) => state.player && state.player.drawHistogram(buckets),
   });
   state.player.start();
-  state.chat.load();
+  if (state.chat) state.chat.load();
 }
 
 function playNext(cur) {
@@ -93,12 +188,16 @@ function closePlayer() {
   if (state.player) state.player.destroy();
   if (state.chat) state.chat.destroy();
   state.player = state.chat = state.current = null;
+  playerView.classList.remove("no-chat"); // next open is a normal layout again
 }
 
 async function backToLibrary({ refetch = true } = {}) {
+  const returnId = state.current && state.current.id; // capture before closePlayer nulls it
   closePlayer();
   if (refetch) await refreshLibrary();
+  else render();
   showLibrary();
+  scrollToVod(returnId); // after showLibrary(): a hidden list has no geometry
 }
 
 async function route() {
@@ -133,23 +232,41 @@ window.addEventListener("popstate", () => {
   else route();
 });
 
-document.getElementById("back-btn").addEventListener("click", () => {
+function goBack() {
   if (state.pushedFromLibrary) {
     history.back(); // popstate handler does the teardown
   } else {
     history.replaceState({}, "", location.pathname);
     backToLibrary();
   }
-});
+}
+// Two back buttons: the chat header's, and the controls-row one that appears
+// in chat-less (orphan) playback where the chat column is hidden.
+document.getElementById("back-btn").addEventListener("click", goBack);
+document.getElementById("back-btn-ctl").addEventListener("click", goBack);
 
 setupLibrary({
   onOpen: (vod) => openVod(vod, { push: true }),
   onRefresh: refreshLibrary,
-  onSortChange: (dir) => {
+  onRerender: render,
+  onSortChange: ({ by, dir }) => {
+    lsSet("ts.sortBy", by);
     lsSet("ts.sort", dir);
-    state.sorted = sortVods(state.vods, dir);
-    renderLibrary(state.sorted, state.folderCount > 1);
+    resort();
+    render();
   },
+  onFilterChange: (kind, values) => {
+    lsSet("ts.filter." + kind, JSON.stringify(values));
+    resort();
+    render();
+  },
+  onFilterClear: () => {
+    lsSet("ts.filter.streamers", "[]");
+    lsSet("ts.filter.games", "[]");
+    resort();
+    render();
+  },
+  getFilterData: () => distinctFilterValues(state.vods),
 });
 
 route();

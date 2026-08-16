@@ -72,17 +72,126 @@ export function parseStemDate(stem) {
   return { t: dt.getTime(), seq: m[4] ? parseInt(m[4], 10) : 0 };
 }
 
-// Sort by stream date from the filename (mtime is only a download timestamp),
-// falling back to mtime for stems without a parseable date prefix.
-export function sortVods(vods, dir) {
-  const keyed = vods.map((v) => {
-    const p = parseStemDate(v.stem);
-    return { v, t: p ? p.t : v.mtime * 1000, seq: p ? p.seq : 0 };
-  });
-  keyed.sort((a, b) =>
-    (a.t - b.t) || (a.seq - b.seq) || (a.v.mtime - b.v.mtime) || a.v.id.localeCompare(b.v.id));
-  if (dir !== "old") keyed.reverse();
+// The raw "[M-D-YY]" / "[M-D-YY]-N" prefix of a stem, or "" if it has none.
+export function stemDatePrefix(stem) {
+  const m = STEM_DATE_RE.exec(stem || "");
+  return m ? m[0] : "";
+}
+
+// Stream date from the filename (mtime is only a download timestamp), falling
+// back to mtime for stems without a parseable date prefix. Shared tiebreaker
+// for every sort key.
+function dateKey(v) {
+  const p = parseStemDate(v.stem);
+  return { t: p ? p.t : v.mtime * 1000, seq: p ? p.seq : 0 };
+}
+
+export const SORT_KEYS = ["date", "size", "duration", "streamer", "game"];
+// Natural direction per key: newest/largest/longest first, names A→Z.
+export const SORT_DEFAULT_DIR = {
+  date: "desc", size: "desc", duration: "desc", streamer: "asc", game: "asc",
+};
+
+export function currentSortBy() {
+  const v = lsGet("ts.sortBy");
+  return SORT_KEYS.includes(v) ? v : "date";
+}
+
+// "asc" | "desc"; tolerates the legacy "new"/"old" values and falls back to
+// the active key's natural direction when nothing is stored.
+export function currentSortDir() {
+  const v = lsGet("ts.sort");
+  if (v === "old" || v === "asc") return "asc";
+  if (v === "new" || v === "desc") return "desc";
+  return SORT_DEFAULT_DIR[currentSortBy()];
+}
+
+export function sortVods(vods, dir = "desc", by = "date") {
+  const d = dir === "new" ? "desc" : dir === "old" ? "asc" : dir;
+  const sign = d === "asc" ? 1 : -1;
+  const keyed = vods.map((v) => ({ v, k: dateKey(v) }));
+  // Newest-first date order — the fixed tiebreaker for every non-date key, so
+  // flipping e.g. the streamer direction never scrambles rows within a streamer.
+  const newest = (a, b) =>
+    (b.k.t - a.k.t) || (b.k.seq - a.k.seq) || (b.v.mtime - a.v.mtime) ||
+    a.v.id.localeCompare(b.v.id);
+
+  if (by === "size") {
+    keyed.sort((a, b) => sign * (a.v.sizeBytes - b.v.sizeBytes) || newest(a, b));
+  } else if (by === "duration") {
+    // VODs with no known duration (unreadable metadata) go last in either
+    // direction rather than masquerading as 0:00.
+    const has = (x) => Number.isFinite(x.v.durationSec);
+    keyed.sort((a, b) => {
+      if (has(a) !== has(b)) return has(a) ? -1 : 1;
+      return (has(a) ? sign * (a.v.durationSec - b.v.durationSec) : 0) || newest(a, b);
+    });
+  } else if (by === "streamer" || by === "game") {
+    const name = (x) => (by === "streamer" ? x.v.streamer : x.v.game) || "";
+    keyed.sort((a, b) => {
+      const an = name(a), bn = name(b);
+      if (!an !== !bn) return an ? -1 : 1; // unnamed always last
+      return sign * an.toLowerCase().localeCompare(bn.toLowerCase()) || newest(a, b);
+    });
+  } else {
+    // date: ascending (t, seq, mtime, id) fully reversed for newest-first —
+    // byte-for-byte the pre-sort-keys behavior.
+    keyed.sort((a, b) =>
+      (a.k.t - b.k.t) || (a.k.seq - b.k.seq) || (a.v.mtime - b.v.mtime) ||
+      a.v.id.localeCompare(b.v.id));
+    if (d !== "asc") keyed.reverse();
+  }
   return keyed.map((k) => k.v);
+}
+
+// Distinct streamer/game values across the library for the filter dropdowns,
+// as [{name, count}] sorted by name. Games include every chapter's game, so a
+// VOD that switches into a game mid-stream is findable under it even when it
+// isn't the primary category.
+export function distinctFilterValues(vods) {
+  const streamers = new Map(), games = new Map(); // lowercase -> {name, count}
+  const bump = (map, raw) => {
+    if (typeof raw !== "string") return;
+    const name = raw.trim();
+    if (!name) return;
+    const rec = map.get(name.toLowerCase());
+    if (rec) rec.count++;
+    else map.set(name.toLowerCase(), { name, count: 1 });
+  };
+  for (const v of vods) {
+    bump(streamers, v.streamer);
+    // A VOD counts once per game even when several chapters share it.
+    const gset = new Map();
+    const add = (raw) => {
+      if (typeof raw === "string" && raw.trim()) gset.set(raw.trim().toLowerCase(), raw.trim());
+    };
+    add(v.game);
+    for (const c of v.chapters || []) add(c && c.gameDisplayName);
+    for (const name of gset.values()) bump(games, name);
+  }
+  const out = (m) => [...m.values()]
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  return { streamers: out(streamers), games: out(games) };
+}
+
+// sel = {streamers: Set, games: Set} of lowercased names; an empty set passes
+// everything. A game selection matches the primary game or any chapter's game.
+export function vodMatchesFilters(v, sel) {
+  if (sel.streamers.size && !sel.streamers.has((v.streamer || "").toLowerCase())) return false;
+  if (!sel.games.size) return true;
+  if (sel.games.has((v.game || "").toLowerCase())) return true;
+  return (v.chapters || []).some((c) =>
+    c && typeof c.gameDisplayName === "string" && sel.games.has(c.gameDisplayName.trim().toLowerCase()));
+}
+
+// Stored filter selection for "streamers" | "games" (original casing).
+export function readFilter(kind) {
+  try {
+    const arr = JSON.parse(lsGet("ts.filter." + kind) || "[]");
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 // First index i with arr[i] > x (arr ascending).
@@ -119,4 +228,7 @@ export function lsSet(key, val) {
 }
 export function lsDel(key) {
   try { localStorage.removeItem(key); } catch { /* ignore */ }
+}
+export function lsKeys(prefix) {
+  try { return Object.keys(localStorage).filter((k) => k.startsWith(prefix)); } catch { return []; }
 }

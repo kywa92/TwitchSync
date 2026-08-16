@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark; /* native form controls (select, checkbox) render dark */
   --bg: #0e0e10;
   --panel: #18181b;
   --panel-2: #26262c;
@@ -7,6 +8,8 @@
   --text-dim: #adadb8;
   --accent: #9147ff;
   --accent-soft: rgba(145, 71, 255, 0.5);
+  --warn: #f0a04b; /* "this exists but something is off with it" */
+  --warn-soft: rgba(240, 160, 75, 0.5);
 }
 
 * { box-sizing: border-box; }
@@ -31,7 +34,7 @@ button {
 .lib-header h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: -0.5px; }
 .lib-sub { margin: 0; color: var(--text-dim); }
 
-.ghost-btn, .primary-btn {
+.ghost-btn, .primary-btn, .danger-btn {
   flex: none; border-radius: 8px; padding: 8px 16px; font-size: 14px;
   border: 1px solid var(--border); background: var(--panel);
 }
@@ -69,7 +72,7 @@ button {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .folder-count { flex: none; color: var(--text-dim); font-size: 13px; white-space: nowrap; }
-.folder-count.offline { color: #f0a04b; }
+.folder-count.offline { color: var(--warn); }
 .folder-remove {
   flex: none; width: 30px; height: 30px; border-radius: 6px;
   color: var(--text-dim); font-size: 18px; line-height: 1;
@@ -99,33 +102,96 @@ button {
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
   padding: 10px 14px; margin-bottom: 16px; color: var(--text-dim); font-size: 13px;
 }
-#lib-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-#sort-seg {
-  display: flex; overflow: hidden;
-  border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+#lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+#sort-wrap { display: flex; align-items: center; gap: 8px; }
+.toolbar-label { color: var(--text-dim); font-size: 13px; }
+#sort-by {
+  font: inherit; font-size: 13px; color: var(--text); cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 10px;
 }
-.seg-btn { padding: 6px 14px; font-size: 13px; color: var(--text-dim); }
-.seg-btn:hover { background: var(--panel-2); }
-.seg-btn.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
-.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+#sort-by:hover { background: var(--panel-2); border-color: #4b4b53; }
+#sort-by:focus { outline: none; border-color: var(--accent); }
+#sort-dir { padding: 6px 11px; font-size: 13px; color: var(--text-dim); }
+#sort-dir:hover { color: var(--text); }
+.filter-wrap { position: relative; }
+.filter-btn {
+  padding: 6px 14px; font-size: 13px; color: var(--text-dim);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.filter-btn.active { color: var(--text); border-color: var(--accent-soft); }
+.filter-count {
+  font-size: 10.5px; font-weight: 700; line-height: 1;
+  color: var(--accent); border: 1px solid var(--accent-soft);
+  border-radius: 999px; padding: 2px 6px;
+}
+.filter-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  min-width: 220px; max-width: 320px; max-height: 320px; overflow-y: auto;
+  background: #1f1f23; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  scrollbar-width: thin; scrollbar-color: #3f3f46 transparent;
+}
+.filter-opt {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 13px;
+}
+.filter-opt:hover { background: rgba(255, 255, 255, 0.07); }
+.filter-opt input { accent-color: var(--accent); margin: 0; flex: none; }
+.filter-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.filter-n { color: var(--text-dim); font-size: 11.5px; }
+.filter-clear-row {
+  display: block; width: 100%; text-align: left;
+  padding: 6px 10px; border-radius: 5px; font-size: 12.5px; color: var(--accent);
+}
+.filter-clear-row:hover { background: rgba(255, 255, 255, 0.07); }
+.filter-none { padding: 6px 10px; color: var(--text-dim); font-size: 12.5px; }
+#filter-empty { color: var(--text); padding: 24px 4px; }
+#filter-empty p { margin: 0 0 12px; }
 #autoplay-label {
   margin-left: auto; display: flex; align-items: center; gap: 7px;
   color: var(--text-dim); font-size: 13px; cursor: pointer;
 }
 #autoplay-label input { accent-color: var(--accent); }
+#reset-history { padding: 6px 14px; font-size: 13px; color: var(--text-dim); }
+#chat-check-status {
+  padding: 6px 14px; font-size: 13px;
+  color: var(--warn); border-color: var(--warn-soft);
+}
+#chat-check-status.busy { color: var(--text-dim); border-color: var(--border); }
 #vod-list { list-style: none; margin: 0; padding: 0; }
+/* The li (not the card) carries the margin so it wraps the card exactly —
+   the reset control centers against it. */
+#vod-list li { position: relative; margin-bottom: 10px; }
 .vod-btn {
   position: relative; overflow: hidden;
   display: flex; align-items: center; gap: 14px;
   width: 100%; text-align: left;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  padding: 12px 18px 12px 12px; margin-bottom: 10px;
+  padding: 12px 18px 12px 12px;
   transition: background 0.12s, border-color 0.12s;
 }
-.vod-btn:hover { background: var(--panel-2); border-color: #4b4b53; }
+/* Hover on the li, so the row highlight holds while over the reset control. */
+#vod-list li:hover .vod-btn { background: var(--panel-2); border-color: #4b4b53; }
+#vod-list li.has-reset .vod-btn { padding-right: 52px; }
+.vod-reset {
+  position: absolute; top: 50%; right: 10px;
+  transform: translateY(-50%);
+  width: 30px; height: 30px; border-radius: 6px;
+  color: var(--text-dim); font-size: 17px; line-height: 1;
+}
+.vod-reset:hover { background: rgba(255, 255, 255, 0.09); color: var(--text); }
 .vod-thumb-box {
-  flex: none; width: 128px; height: 72px;
+  position: relative; flex: none; width: 128px; height: 72px;
   border-radius: 6px; overflow: hidden; background: var(--panel-2);
+}
+/* No extractable frame (e.g. the VOD is still copying to the NAS): a dim play
+   glyph instead of an empty box. */
+.vod-thumb-box.no-thumb::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23adadb8' d='M9 7l8 5-8 5z'/%3E%3C/svg%3E") center / 26px no-repeat;
+  opacity: 0.35;
 }
 .vod-thumb {
   width: 100%; height: 100%; object-fit: cover; display: block;
@@ -141,6 +207,7 @@ button {
   color: var(--accent); border: 1px solid var(--accent-soft);
   border-radius: 999px; padding: 1px 7px; white-space: nowrap;
 }
+.vod-chip.warn { color: var(--warn); border-color: var(--warn-soft); }
 .vod-progress {
   position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
   background: rgba(255, 255, 255, 0.07);
@@ -155,6 +222,21 @@ button {
 #lib-empty { color: var(--text); padding: 24px 4px; }
 #lib-empty .dim { color: var(--text-dim); }
 #lib-empty code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+/* ---------- orphaned files ---------- */
+
+#orphan-section { border-top: 1px solid var(--warn-soft); margin-top: 28px; padding-top: 16px; }
+#orphan-section h2 {
+  margin: 0 0 6px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.9px; text-transform: uppercase; color: var(--warn);
+}
+#orphan-section .dim { margin: 0 0 14px; color: var(--text-dim); font-size: 12.5px; }
+#orphan-list { list-style: none; margin: 0; padding: 0; }
+#orphan-list li { position: relative; margin-bottom: 10px; }
+.vod-btn.orphan { border-color: var(--warn-soft); }
+#orphan-list li:hover .vod-btn { background: var(--panel-2); border-color: var(--warn); }
+.vod-btn.orphan.inert { cursor: default; }
+#orphan-list li:hover .vod-btn.inert { background: var(--panel); border-color: var(--warn-soft); }
 
 /* ---------- Player layout ---------- */
 
@@ -172,6 +254,18 @@ button {
 @media (max-width: 1100px) {
   #player-view { grid-template-columns: minmax(0, 1fr) 300px; }
 }
+/* Chat-less playback (orphan mp4s): the stage and controls take the full
+   width, the chat column is gone, and the controls row grows a back button. */
+#player-view.no-chat {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "stage"
+    "controls";
+}
+#player-view.no-chat #chat-col { display: none; }
+#player-view.no-chat #histogram { display: none; } /* fed by chat data only */
+#back-btn-ctl { display: none; }
+#player-view.no-chat #back-btn-ctl { display: inline-flex; }
 
 #stage { grid-area: stage; position: relative; min-width: 0; min-height: 0; }
 #stage video {
@@ -244,6 +338,7 @@ img.emote-zw {
 
 #controls {
   grid-area: controls;
+  position: relative; /* anchors #mute-notice just above the controls */
   background: var(--panel); border-top: 1px solid var(--border);
   padding: 0 12px 6px; user-select: none;
   transition: opacity 0.25s;
@@ -263,6 +358,10 @@ img.emote-zw {
 #seek-buffered-layer { position: absolute; inset: 0; }
 .seek-buffered { position: absolute; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.25); }
 #seek-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0%; background: var(--accent); }
+/* Muted-audio stretches: painted over fill and buffered (the layer is a later
+   sibling) so they read at a glance in both played and unplayed regions. */
+#seek-muted-layer { position: absolute; inset: 0; pointer-events: none; }
+.seek-muted-seg { position: absolute; top: 0; bottom: 0; background: rgba(255, 92, 92, 0.6); }
 #seek-handle {
   position: absolute; top: 50%; left: 0%;
   width: 13px; height: 13px; border-radius: 50%;
@@ -344,3 +443,47 @@ img.emote-zw {
   opacity: 0; transition: opacity 0.25s; pointer-events: none;
 }
 #toast.show { opacity: 1; }
+
+/* "source audio muted until H:MM:SS" — centered just above the playback
+   controls while the playhead sits in a muted stretch. Absolute so its
+   appearance never shifts the layout; a child of #controls so the
+   fullscreen-idle fade applies to it too. */
+#mute-notice {
+  position: absolute; bottom: calc(100% + 10px); left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85); border: 1px solid var(--border);
+  border-radius: 999px; padding: 6px 14px;
+  font-size: 12.5px; color: var(--text); white-space: nowrap;
+  pointer-events: none; z-index: 3;
+}
+#mute-notice a {
+  color: var(--text); text-decoration: underline; cursor: pointer;
+  pointer-events: auto; font-variant-numeric: tabular-nums;
+}
+/* The faded controls are pointer-events:none; without this the link's own
+   pointer-events:auto would resurrect an invisible click target. */
+#player-view.hide-controls #mute-notice a { pointer-events: none; }
+
+/* ---------- confirmation modal ---------- */
+
+#confirm-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+#confirm-box {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px 22px; max-width: 380px; margin: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+#confirm-msg { margin: 0 0 16px; }
+#confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.danger-btn { background: #993036; border-color: #993036; font-weight: 600; }
+.danger-btn:hover { background: #b03a41; border-color: #b03a41; }
+
+/* ---------- version tag ---------- */
+
+#version-tag {
+  position: absolute; top: 12px; right: 16px;
+  color: var(--text-dim); font-size: 12px;
+}
