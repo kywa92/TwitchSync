@@ -17,6 +17,7 @@ const state = {
   chat: null,
   current: null,
   pushedFromLibrary: false,
+  returnScrollY: null,  // library scroll position captured when a video was opened
   checkKey: "",         // identity of the flag set we last received
   renderedCheckKey: "", // ...and the one currently painted into the list
 };
@@ -145,6 +146,10 @@ function showLibrary(notice) {
 }
 
 function openVod(vod, { push = false, replace = false } = {}) {
+  // Remember exactly where the list was scrolled when the viewer left it, so
+  // Back / Escape returns them there. Only a push is a genuine open from the
+  // (visible) library; autoplay (replace) and deep links keep the captured spot.
+  if (push && !libraryView.hidden) state.returnScrollY = window.scrollY;
   closePlayer();
   if (push) {
     history.pushState({ v: vod.id }, "", "?v=" + encodeURIComponent(vod.id));
@@ -164,7 +169,7 @@ function openVod(vod, { push = false, replace = false } = {}) {
   // Orphan mp4s have no chat file: hide the chat column entirely (the chat
   // may already be burned into the video) and skip the Chat instance.
   playerView.classList.toggle("no-chat", !!vod.isOrphan);
-  state.player = new Player(vod, { onEnded: () => playNext(vod) });
+  state.player = new Player(vod, { onEnded: () => playNext(vod), onBack: goBack });
   state.chat = vod.isOrphan ? null : new Chat(vod, state.player.video, {
     onHistogram: (buckets) => state.player && state.player.drawHistogram(buckets),
   });
@@ -197,7 +202,17 @@ async function backToLibrary({ refetch = true } = {}) {
   if (refetch) await refreshLibrary();
   else render();
   showLibrary();
-  scrollToVod(returnId); // after showLibrary(): a hidden list has no geometry
+  // After showLibrary() un-hides the list (a hidden list has no geometry):
+  // restore the exact scroll position from when the video was opened. The sort
+  // order is unchanged (it lives in localStorage, untouched during playback),
+  // so the same rows sit at the same offset. Deep-link returns have no captured
+  // position — center the row that was playing instead.
+  if (state.returnScrollY != null) {
+    window.scrollTo(0, state.returnScrollY);
+    state.returnScrollY = null;
+  } else {
+    scrollToVod(returnId);
+  }
 }
 
 async function route() {

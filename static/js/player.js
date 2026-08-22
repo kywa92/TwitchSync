@@ -24,9 +24,10 @@ const show = (node, visible) => {
 };
 
 export class Player {
-  constructor(vod, { onEnded } = {}) {
+  constructor(vod, { onEnded, onBack } = {}) {
     this.vod = vod;
     this.onEnded = onEnded;
+    this.onBack = onBack;
     this.video = $("video");
     this.view = $("player-view");
     this.stage = $("stage");
@@ -596,6 +597,15 @@ export class Player {
       case "f": this.toggleFullscreen(); break;
       case "ArrowUp": e.preventDefault(); this.setVolume(v.volume + 0.05); break;
       case "ArrowDown": e.preventDefault(); this.setVolume(v.volume - 0.05); break;
+      case "Escape":
+        // Escape leaves the player, like the Back button. In fullscreen it
+        // exits fullscreen first (a second Escape then leaves) — the standard
+        // player convention, and it avoids fighting the browser's own
+        // Escape-exits-fullscreen behavior.
+        e.preventDefault();
+        if (document.fullscreenElement) this.toggleFullscreen();
+        else if (this.onBack) this.onBack();
+        break;
       default:
         if (/^[0-9]$/.test(e.key) && Number.isFinite(this.dur)) {
           this._seekTo(this.dur * Number(e.key) / 10);
