@@ -6,7 +6,9 @@ guide to setup, the library, every player control, and troubleshooting.
 
 On first run, point TwitchSync at your library of [TwitchDownloader](https://github.com/lay295/TwitchDownloader) VOD mp4 files and associated json chat files. TwitchSync serves a small local site listing every VOD it finds, and a player with the VOD video on the left, a Twitch style chat column on the right, and one set of controls at the bottom. Chat is rendered in HTML straight from the chat JSON and tied to the video clock, so scrubbing anywhere instantly shows the chat from that moment. TwitchSync can read both local and remote (NAS/network storage) libraries. 
 
+
 <img width="754" height="724" alt="Screenshot 2026-08-23 at 12 06 30 PM" src="https://github.com/user-attachments/assets/ff2b3cfb-ef44-47b6-8fca-0745a4b3ddb3" />
+
 
 ## Run
 
@@ -55,7 +57,9 @@ in the filename is ignored.
 - Chat text is selectable; animated emotes (GIF/WebP) animate; zero-width
   emotes overlay their base emote as on Twitch.\
 
-<img width="1352" height="726" alt="Screenshot 2026-08-23 at 12 06 57 PM" src="https://github.com/user-attachments/assets/cc1a60eb-c106-4b83-a19d-4f2c039b5865" />
+
+<img width="1352" height="725" alt="Screenshot 2026-08-23 at 12 11 43 PM" src="https://github.com/user-attachments/assets/ad5a2c98-36c4-45bc-8f91-daeffb0c2e82" />
+
 
 ## Emotes
 `python3 server.py --sync-emotes` downloads the 7TV + BTTV channel sets for every streamer found in your library plus both global sets into emote-cache/, then writes a manifest. Chat playback now fills in any emote missing from a VOD's embedded data. Playback stays fully offline; the network is only touched by that explicit command, which you can re-run anytime (it skips files it already has).
