@@ -11,8 +11,6 @@ On first run, point TwitchSync at your library of [TwitchDownloader](https://git
 
 <img width="754" height="724" alt="Screenshot 2026-08-23 at 12 06 30 PM" src="https://github.com/user-attachments/assets/ff2b3cfb-ef44-47b6-8fca-0745a4b3ddb3" />
 
-<img width="1352" height="726" alt="Screenshot 2026-08-23 at 12 06 57 PM" src="https://github.com/user-attachments/assets/cc1a60eb-c106-4b83-a19d-4f2c039b5865" />
-
 ## Run
 
 ```bash
@@ -58,7 +56,9 @@ in the filename is ignored.
 - Playback position, volume, and speed are remembered per VOD (localStorage).
 - Scrolling up in chat pauses auto-scroll ("Chat paused — click to resume").
 - Chat text is selectable; animated emotes (GIF/WebP) animate; zero-width
-  emotes overlay their base emote as on Twitch.
+  emotes overlay their base emote as on Twitch.\
+
+<img width="1352" height="726" alt="Screenshot 2026-08-23 at 12 06 57 PM" src="https://github.com/user-attachments/assets/cc1a60eb-c106-4b83-a19d-4f2c039b5865" />
 
 ## Emotes
 `python3 server.py --sync-emotes` downloads the 7TV + BTTV channel sets for every streamer found in your library plus both global sets into emote-cache/, then writes a manifest. Chat playback now fills in any emote missing from a VOD's embedded data. Playback stays fully offline; the network is only touched by that explicit command, which you can re-run anytime (it skips files it already has).
