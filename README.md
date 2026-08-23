@@ -1,6 +1,3 @@
-<img width="370" height="71" align="center" alt="title" src="https://github.com/user-attachments/assets/3e291afb-e9af-4b16-b4d5-f15b6ba10358" />
-
-
 # TwitchSync
 A browser based web app (naturally cross platform) that allows rich playback of Twitch VODs and JSON chat logs that are downloaded using the open source [TwitchDownloader](https://github.com/lay295/TwitchDownloader) tool (CLI or GUI).
 
