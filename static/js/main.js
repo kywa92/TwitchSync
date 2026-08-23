@@ -3,7 +3,7 @@
 import { setupLibrary, renderLibrary, renderOrphans, renderFolders, showNotice,
          setChatCheck, renderCheckChip, scrollToVod } from "./library.js";
 import { Player } from "./player.js";
-import { Chat } from "./chat.js";
+import { Chat, setupChatSettings } from "./chat.js";
 import { sortVods, currentSortBy, currentSortDir, distinctFilterValues,
          vodMatchesFilters, readFilter, fmtDate, lsGet, lsSet } from "./util.js";
 import { setThumbsPaused, setThumbsServerGen } from "./thumbs.js";
@@ -259,6 +259,8 @@ function goBack() {
 // in chat-less (orphan) playback where the chat column is hidden.
 document.getElementById("back-btn").addEventListener("click", goBack);
 document.getElementById("back-btn-ctl").addEventListener("click", goBack);
+
+setupChatSettings();
 
 setupLibrary({
   onOpen: (vod) => openVod(vod, { push: true }),

@@ -99,6 +99,24 @@
         <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
       </button>
       <span>Stream Chat</span>
+      <button id="chat-settings-btn" class="ctl-btn" title="Chat settings" aria-label="Chat settings">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.07.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+      </button>
+      <div id="chat-settings-pop" hidden>
+        <label class="cs-row">
+          <input id="cs-timestamps" type="checkbox">
+          <span class="cs-label">Show message timestamps</span>
+        </label>
+        <label class="cs-row">
+          <input id="cs-shortnames" type="checkbox">
+          <span class="cs-label">Shorten names to first letter<span class="cs-hint">Hover a message to reveal the full name</span></span>
+        </label>
+        <div class="cs-block">
+          <div class="cs-head"><span>Chat width</span><span id="cs-width-val" class="cs-val">30%</span></div>
+          <input id="cs-width" type="range" min="15" max="50" step="1" aria-label="Chat width percentage">
+        </div>
+        <button id="cs-reset" class="cs-reset">Reset to defaults</button>
+      </div>
     </header>
     <div id="chat-scroll">
       <div id="chat-messages"></div>
@@ -146,6 +164,20 @@
       <div id="speed-wrap">
         <button id="btn-speed" class="ctl-btn" title="Playback speed">1×</button>
         <div id="speed-menu" hidden></div>
+      </div>
+      <div id="zoom-wrap">
+        <button id="btn-zoom" class="ctl-btn" title="Zoom (scroll on the video; drag to pan)">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm.5-7H9v2H7v1h2v2h1v-2h2V9h-2z"/></svg>
+        </button>
+        <div id="zoom-menu" hidden>
+          <label class="zoom-fill">
+            <input id="zoom-fill" type="checkbox">
+            <span>Fill screen<span class="zoom-hint">Crop to remove black bars</span></span>
+          </label>
+          <div class="zoom-head"><span>Zoom</span><span id="zoom-val">100%</span></div>
+          <input id="zoom-range" type="range" min="100" max="400" step="5" value="100" aria-label="Zoom level">
+          <button id="zoom-reset" class="zoom-reset">Reset</button>
+        </div>
       </div>
       <button id="btn-mute" class="ctl-btn" title="Mute (m)">
         <svg id="icon-vol" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>

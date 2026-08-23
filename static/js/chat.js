@@ -2,13 +2,109 @@
 // blob URLs, renders messages as DOM, and keeps the column in sync with the
 // video clock (append on timeupdate, binary-search rebuild on seek).
 
-import { el, fmtTime, colorHash, readableColor, upperBound, sniffImageMime } from "./util.js";
+import { el, fmtTime, colorHash, readableColor, upperBound, sniffImageMime,
+         lsGet, lsSet, lsDel } from "./util.js";
 
 const PIN_CAP = 200;      // max messages in DOM while pinned to bottom
 const UNPIN_CAP = 500;    // hard bound while the user reads scrollback
 const BACKFILL = 50;      // messages rendered above the seek point for context
 
 const $ = (id) => document.getElementById(id);
+
+// ---- chat settings -------------------------------------------------------
+// Timestamp visibility and column width are page-level preferences, not
+// per-VOD state: a Chat instance is created and destroyed on every open, so
+// the panel is bound once for the document and applied from localStorage.
+
+const CHAT_W_MIN = 15;  // percent of the window; keep both ends usable
+const CHAT_W_MAX = 50;
+const CHAT_W_DEFAULT = 30; // ≈ the stylesheet's 380px at a typical window
+let csBound = false;
+
+// Non-finite input (a garbled stored value, or a measurement taken while the
+// window reports zero width) falls back to the default instead of NaN.
+const clampChatWidth = (w) =>
+  Number.isFinite(w) ? Math.min(CHAT_W_MAX, Math.max(CHAT_W_MIN, Math.round(w))) : CHAT_W_DEFAULT;
+
+export function applyChatSettings() {
+  const col = $("chat-col");
+  const view = $("player-view");
+  if (!col || !view) return;
+  col.classList.toggle("hide-ts", lsGet("ts.chatTimestamps") === "0");
+  col.classList.toggle("short-names", lsGet("ts.chatShortNames") === "1");
+  const w = parseFloat(lsGet("ts.chatWidth"));
+  // No stored width: drop the override so the stylesheet's responsive default
+  // (380px, 300px on narrow windows) takes over again.
+  if (Number.isFinite(w)) view.style.setProperty("--chat-w", clampChatWidth(w) + "%");
+  else view.style.removeProperty("--chat-w");
+}
+
+export function setupChatSettings() {
+  applyChatSettings();
+  if (csBound) return;
+  csBound = true;
+
+  const btn = $("chat-settings-btn");
+  const pop = $("chat-settings-pop");
+  const tsBox = $("cs-timestamps");
+  const shortBox = $("cs-shortnames");
+  const width = $("cs-width");
+  const widthVal = $("cs-width-val");
+
+  const syncControls = () => {
+    tsBox.checked = lsGet("ts.chatTimestamps") !== "0";
+    shortBox.checked = lsGet("ts.chatShortNames") === "1";
+    const stored = parseFloat(lsGet("ts.chatWidth"));
+    // Unset: seed the slider from the column's real width so it starts under
+    // the viewer's thumb instead of jumping on the first drag.
+    const cur = Number.isFinite(stored)
+      ? clampChatWidth(stored)
+      : clampChatWidth(window.innerWidth > 0
+        ? ($("chat-col").offsetWidth / window.innerWidth) * 100
+        : NaN);
+    width.value = String(cur);
+    widthVal.textContent = cur + "%";
+  };
+  const open = () => { syncControls(); pop.hidden = false; btn.classList.add("open"); };
+  const close = () => { pop.hidden = true; btn.classList.remove("open"); };
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    pop.hidden ? open() : close();
+  });
+  pop.addEventListener("click", (e) => e.stopPropagation()); // clicks inside stay inside
+  document.addEventListener("click", () => { if (!pop.hidden) close(); });
+  // Escape leaves the player, so an open panel has to claim the key first.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    }
+  }, true);
+
+  tsBox.addEventListener("change", () => {
+    lsSet("ts.chatTimestamps", tsBox.checked ? "1" : "0");
+    applyChatSettings();
+  });
+  shortBox.addEventListener("change", () => {
+    lsSet("ts.chatShortNames", shortBox.checked ? "1" : "0");
+    applyChatSettings();
+  });
+  width.addEventListener("input", () => {
+    const v = clampChatWidth(parseFloat(width.value));
+    widthVal.textContent = v + "%";
+    lsSet("ts.chatWidth", String(v));
+    applyChatSettings();
+  });
+  $("cs-reset").addEventListener("click", () => {
+    lsDel("ts.chatWidth");
+    lsDel("ts.chatTimestamps");
+    lsDel("ts.chatShortNames");
+    applyChatSettings();
+    syncControls(); // reflect the restored defaults without closing the panel
+  });
+}
 
 export class Chat {
   constructor(vod, video, { onHistogram } = {}) {
@@ -208,8 +304,17 @@ export class Chat {
     }
 
     const commenter = c.commenter || {};
-    const name = el("span", "name", commenter.display_name || commenter.name || "?");
+    const full = commenter.display_name || commenter.name || "?";
+    const name = el("span", "name");
     name.style.color = readableColor(m.user_color || colorHash(commenter.name || commenter.display_name));
+    // Always split off everything after the first character into its own span:
+    // the "shorten names" setting then collapses it with CSS alone, so the
+    // toggle applies instantly to messages already on screen and the full name
+    // stays in the DOM for selection and copy. Array.from splits by code point,
+    // so a display name starting with an emoji or a surrogate pair stays whole.
+    const chars = Array.from(full);
+    name.append(document.createTextNode(chars[0] || "?"));
+    if (chars.length > 1) name.append(el("span", "nm-rest", chars.slice(1).join("")));
     msg.append(name, document.createTextNode(": "));
 
     const body = el("span", "body");

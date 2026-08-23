@@ -16,6 +16,10 @@ const RECOVER_DELAYS = [300, 600, 1200, 2500, 4000, 6000]; // ms before each rel
 const RECOVER_REGION = 5;  // errors within ±5 s count as "the same spot"
 const RECOVER_STABLE = 30; // seconds of clean playback that reset the ladder
 
+const ZOOM_MAX = 4;        // 400%
+const ZOOM_STEP = 1.15;    // per wheel notch
+const PAN_SLOP = 4;        // px of drag that still counts as a click, not a pan
+
 // SVGElement has no `hidden` IDL property, so toggle the attribute (which the
 // CSS [hidden] rule matches) for the inline SVG icons.
 const show = (node, visible) => {
@@ -59,6 +63,12 @@ export class Player {
     this.muteLayer = $("seek-muted-layer");
     this.muteNotice = $("mute-notice");
     this.muteLink = $("mute-skip");
+    this.btnZoom = $("btn-zoom");
+    this.zoomMenu = $("zoom-menu");
+    this.zoomRange = $("zoom-range");
+    this.zoomVal = $("zoom-val");
+    this.zoomReset = $("zoom-reset");
+    this.zoomFill = $("zoom-fill");
 
     this._listeners = [];
     this._bufDivs = [];
@@ -71,6 +81,18 @@ export class Player {
     this._idleTimer = null;
     this._spinTimer = null;
     this._toastTimer = null;
+    // zoom + pan. The slider is per-open (framing is specific to what you're
+    // watching); "fill screen" is a standing preference, so it persists.
+    this._fill = lsGet("ts.zoomFill") === "1";
+    this._ro = null;
+    this._zoom = 1;
+    this._panX = 0;
+    this._panY = 0;
+    this._panning = false;
+    this._panFrom = null;
+    this._panMoved = 0;
+    this._panMax = { x: 0, y: 0 }; // room to pan, from the last apply
+    this._suppressClick = false;
     // muted-audio segments (from /api/muted)
     this._muteDivs = [];
     this._muteSegs = null;
@@ -120,6 +142,7 @@ export class Player {
     this._buildSpeedMenu();
     this._bind();
     this._onVolumeChange();
+    this._applyZoom(); // sync the zoom control to this open's fresh 100%
     this._loadMuted();
 
     v.src = "/media?v=" + encodeURIComponent(this.vod.id);
@@ -166,6 +189,16 @@ export class Player {
     this.toast.hidden = true;
     this.toast.classList.remove("show");
     this.speedMenu.hidden = true;
+    // Shared <video> node: the zoom transform must not survive into the next open.
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
+    this.zoomMenu.hidden = true;
+    this.video.style.transform = "";
+    this._zoom = 1;
+    this._panX = this._panY = 0;
+    this._panning = false;
+    this._suppressClick = false;
+    this.stage.classList.remove("zoomed");
+    this.btnZoom.classList.remove("active");
     this.view.classList.remove("hide-controls", "scrubbing", "is-fs");
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
@@ -212,6 +245,7 @@ export class Player {
       v.play().catch(() => {});
     });
     this._on(this.stage, "click", (e) => {
+      if (this._suppressClick) { this._suppressClick = false; return; } // end of a pan drag
       if (e.target === v) this.togglePlay();
     });
     this._on(this.stage, "dblclick", (e) => {
@@ -241,15 +275,16 @@ export class Player {
       e.stopPropagation();
       this.speedMenu.hidden = !this.speedMenu.hidden;
     });
-    this._on(document, "click", () => { this.speedMenu.hidden = true; });
+    this._on(document, "click", () => { this.speedMenu.hidden = true; this.zoomMenu.hidden = true; });
     this._on(this.btnFs, "click", () => this.toggleFullscreen());
     this._on(document, "fullscreenchange", () => this._onFsChange());
     this._on(document, "keydown", (e) => this._onKey(e));
     this._on(this.view, "pointermove", () => this._wake());
-    this._on(window, "resize", () => this._drawHist());
+    this._on(window, "resize", () => { this._drawHist(); this._applyZoom(); });
     this._on(window, "pagehide", () => this._savePos());
 
     this._bindSeek();
+    this._bindZoom();
   }
 
   // ---- playback state ----------------------------------------------------
@@ -302,6 +337,7 @@ export class Player {
       }
     }
     this._renderMuted(); // segments may have arrived before the metadata did
+    this._applyZoom();   // videoWidth/Height are known now — re-clamp the pan bounds
     this._updateSeekUI();
   }
 
@@ -415,6 +451,154 @@ export class Player {
         div.hidden = true;
       }
     }
+  }
+
+  // ---- zoom + pan --------------------------------------------------------
+  // A CSS transform on the <video> element: scale to zoom, translate to pan.
+  // The stage clips it, so the picture never spills into chat or the controls.
+
+  // cx/cy: cursor offset from the element's untransformed centre, so the point
+  // under the pointer stays put while the wheel zooms. Omit to zoom on centre.
+  _setZoom(z, cx, cy) {
+    const next = Math.min(ZOOM_MAX, Math.max(1, z));
+    if (next === this._zoom) return;
+    const k = next / this._zoom;
+    if (cx != null) {
+      this._panX = cx - k * (cx - this._panX);
+      this._panY = cy - k * (cy - this._panY);
+    } else {
+      this._panX *= k; // slider: hold the centre of the current view
+      this._panY *= k;
+    }
+    this._zoom = next;
+    this._applyZoom();
+  }
+
+  _resetZoom() {
+    this._zoom = 1;
+    this._panX = this._panY = 0;
+    this._applyZoom();
+  }
+
+  // The picture as object-fit: contain lays it out — i.e. letterboxed inside
+  // the element box. Everything else measures against this, not the box.
+  _picture() {
+    const v = this.video;
+    const bw = v.clientWidth, bh = v.clientHeight;
+    if (!(bw > 0 && bh > 0 && v.videoWidth > 0 && v.videoHeight > 0)) {
+      return { bw, bh, pw: bw, ph: bh };
+    }
+    const s = Math.min(bw / v.videoWidth, bh / v.videoHeight);
+    return { bw, bh, pw: v.videoWidth * s, ph: v.videoHeight * s };
+  }
+
+  // Extra scale needed to cover the stage, cropping the letterbox/pillarbox
+  // bars away. 1 when fill is off or the geometry isn't known yet. Recomputed
+  // on every apply, so it tracks the video's aspect, window size, fullscreen
+  // and the chat-width setting without any stored state.
+  _fitScale() {
+    if (!this._fill) return 1;
+    const { bw, bh, pw, ph } = this._picture();
+    if (!(pw > 0 && ph > 0)) return 1;
+    return Math.max(1, Math.max(bw / pw, bh / ph));
+  }
+
+  // What the video is actually scaled by: the fill baseline times the slider.
+  _scale() { return this._fitScale() * this._zoom; }
+
+  // Keep the panned picture covering the stage — never drag past its edges
+  // into empty space. Returns the bounds so the caller can tell whether
+  // panning is possible at all.
+  _clampPan() {
+    const { bw, bh, pw, ph } = this._picture();
+    const s = this._scale();
+    const maxX = Math.max(0, (pw * s - bw) / 2);
+    const maxY = Math.max(0, (ph * s - bh) / 2);
+    this._panX = Math.min(maxX, Math.max(-maxX, this._panX));
+    this._panY = Math.min(maxY, Math.max(-maxY, this._panY));
+    return { maxX, maxY };
+  }
+
+  _applyZoom() {
+    if (this._destroyed) return;
+    const { maxX, maxY } = this._clampPan();
+    this._panMax = { x: maxX, y: maxY };
+    const s = this._scale();
+    this.video.style.transform = s === 1 && !this._panX && !this._panY
+      ? ""
+      : "translate(" + this._panX + "px, " + this._panY + "px) scale(" + s + ")";
+    // Grab cursor whenever there is somewhere to pan to — in fill mode that is
+    // true even at 100%, since the cropped axis extends past the stage.
+    this.stage.classList.toggle("zoomed", maxX > 0.5 || maxY > 0.5);
+    this.btnZoom.classList.toggle("active", this._fill || this._zoom > 1);
+    this.zoomFill.checked = this._fill;
+    const pct = Math.round(this._zoom * 100);
+    this.zoomRange.value = String(pct);
+    this.zoomVal.textContent = pct + "%";
+  }
+
+  _bindZoom() {
+    const v = this.video;
+    this._on(this.btnZoom, "click", (e) => {
+      e.stopPropagation();
+      this.speedMenu.hidden = true;
+      this.zoomMenu.hidden = !this.zoomMenu.hidden;
+    });
+    this._on(this.zoomMenu, "click", (e) => e.stopPropagation()); // dragging the slider must not close it
+    this._on(this.zoomRange, "input", () => this._setZoom(parseFloat(this.zoomRange.value) / 100));
+    this._on(this.zoomReset, "click", () => this._resetZoom());
+    this._on(this.zoomFill, "change", () => {
+      this._fill = this.zoomFill.checked;
+      lsSet("ts.zoomFill", this._fill ? "1" : "0");
+      this._panX = this._panY = 0; // re-centre: the framing just changed under them
+      this._applyZoom();
+    });
+
+    // The stage resizes for reasons no window "resize" event covers — entering
+    // fullscreen, and the chat-width setting — and the fill scale depends on it.
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this._applyZoom());
+      this._ro.observe(this.stage);
+    }
+
+    this._on(this.stage, "wheel", (e) => {
+      if (e.target !== v) return; // let the big-play button keep its own scroll
+      e.preventDefault();
+      const rect = v.getBoundingClientRect();
+      // rect is the *transformed* box; back out the pan to find the original centre.
+      const cx = e.clientX - (rect.left + rect.width / 2 - this._panX);
+      const cy = e.clientY - (rect.top + rect.height / 2 - this._panY);
+      this._setZoom(this._zoom * (e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP), cx, cy);
+    }, { passive: false });
+
+    this._on(v, "pointerdown", (e) => {
+      // Gate on real room to pan, not the slider: fill mode overflows the
+      // stage at 100% too, and a fully-fitted picture has nowhere to go.
+      if (e.button !== 0) return;
+      if (this._panMax.x <= 0.5 && this._panMax.y <= 0.5) return;
+      e.preventDefault();
+      v.setPointerCapture(e.pointerId);
+      this._panning = true;
+      this._panMoved = 0;
+      this._panFrom = { x: e.clientX, y: e.clientY, px: this._panX, py: this._panY };
+    });
+    this._on(v, "pointermove", (e) => {
+      if (!this._panning) return;
+      const dx = e.clientX - this._panFrom.x;
+      const dy = e.clientY - this._panFrom.y;
+      this._panMoved = Math.max(this._panMoved, Math.abs(dx) + Math.abs(dy));
+      this._panX = this._panFrom.px + dx;
+      this._panY = this._panFrom.py + dy;
+      this._applyZoom();
+    });
+    const endPan = () => {
+      if (!this._panning) return;
+      this._panning = false;
+      // A real drag must not also toggle play/pause on the click that follows.
+      if (this._panMoved > PAN_SLOP) this._suppressClick = true;
+    };
+    this._on(v, "pointerup", endPan);
+    this._on(v, "pointercancel", endPan);
   }
 
   // ---- muted-audio segments ----------------------------------------------
@@ -607,11 +791,7 @@ export class Player {
         else if (this.onBack) this.onBack();
         break;
       default:
-        if (/^[0-9]$/.test(e.key) && Number.isFinite(this.dur)) {
-          this._seekTo(this.dur * Number(e.key) / 10);
-        } else {
-          return;
-        }
+        return;
     }
     this._wake();
   }
@@ -635,6 +815,7 @@ export class Player {
     show($("icon-fs-exit"), fs);
     this._wake();
     this._drawHist();
+    this._applyZoom(); // the stage just changed size — pan bounds move with it
   }
 
   _wake() {
