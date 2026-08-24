@@ -331,13 +331,19 @@ button {
 
 /* Names shortened to their first letter. Everything after the first character
    lives in .nm-rest, which collapses to zero width and slides back open while
-   the message is hovered. Badges sit outside .name and are never affected. */
+   the name itself is hovered. Badges sit outside .name and are never affected.
+
+   inline-flex, not inline-block: an inline-block with overflow:hidden takes its
+   baseline from its bottom margin edge, so the tail of the name drifted off the
+   text baseline (badly — ~20px — on a line made tall by a big emote). A flex
+   container keeps the baseline of the text inside it, so the two halves of the
+   name stay welded together whatever else shares the line. */
 #chat-col.short-names .msg .nm-rest {
-  display: inline-block; vertical-align: bottom;
+  display: inline-flex; vertical-align: baseline;
   max-width: 0; overflow: hidden; white-space: nowrap;
   transition: max-width 0.18s ease;
 }
-#chat-col.short-names .msg:hover .nm-rest { max-width: 24ch; }
+#chat-col.short-names .msg .name:hover .nm-rest { max-width: 24ch; }
 
 #chat-scroll {
   flex: 1; min-height: 0;
@@ -383,6 +389,18 @@ img.emote-zw {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 #chat-paused-pill:hover { background: #26262c; }
+
+/* Emote name on hover. Fixed-position and pointer-events:none so it can sit
+   over the video edge without ever stealing the pointer; shown instantly
+   rather than waiting out the browser's title-tooltip delay. */
+#emote-tip {
+  position: fixed; z-index: 40; pointer-events: none;
+  transform: translate(-50%, -100%);
+  background: rgba(0, 0, 0, 0.92); border: 1px solid var(--border);
+  border-radius: 5px; padding: 3px 8px;
+  font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
 
 /* ---------- Controls ---------- */
 

@@ -119,6 +119,7 @@ export class Chat {
     this.loadFill = $("chat-load-fill");
     this.errBox = $("chat-error");
     this.pill = $("chat-paused-pill");
+    this.emoteTip = $("emote-tip");
 
     this._listeners = [];
     this._urls = [];
@@ -190,6 +191,7 @@ export class Chat {
     this.loadBox.hidden = true;
     this.errBox.hidden = true;
     this.pill.hidden = true;
+    this.emoteTip.hidden = true;
     this.comments = this.times = null;
     this.firstParty = this.thirdParty = this.badges = null;
   }
@@ -339,7 +341,8 @@ export class Chat {
       img.className = cls;
       img.src = info.url;
       img.alt = name;
-      img.title = name;
+      // No title attribute: the hover tooltip below shows the name instantly
+      // instead of waiting out the browser's ~1s title delay.
       return img;
     };
     const emitEmote = (info, name) => {
@@ -396,6 +399,34 @@ export class Chat {
     this._on(this.video, "seeked", () => this._syncToTime());
     this._on(this.scroller, "scroll", () => this._onScroll());
     this._on(this.pill, "click", () => this._repin());
+    // Delegated: messages come and go constantly, so per-emote listeners would
+    // be churned thousands of times over a stream.
+    this._on(this.box, "mouseover", (e) => {
+      const img = e.target.closest && e.target.closest("img.emote");
+      if (img) this._showEmoteTip(img);
+    });
+    this._on(this.box, "mouseout", (e) => {
+      if (e.target.closest && e.target.closest("img.emote")) this._hideEmoteTip();
+    });
+  }
+
+  _showEmoteTip(img) {
+    const name = img.alt;
+    if (!name) return;
+    const tip = this.emoteTip;
+    tip.textContent = name;
+    tip.hidden = false;
+    // Measure after unhiding ([hidden] is display:none, so width reads 0), then
+    // clamp so a long emote name never pokes off the side of the window.
+    const r = img.getBoundingClientRect();
+    const half = tip.offsetWidth / 2;
+    const x = Math.min(window.innerWidth - half - 4, Math.max(half + 4, r.left + r.width / 2));
+    tip.style.left = x + "px";
+    tip.style.top = Math.max(tip.offsetHeight + 4, r.top - 4) + "px";
+  }
+
+  _hideEmoteTip() {
+    this.emoteTip.hidden = true;
   }
 
   _on(target, type, fn) {
@@ -464,6 +495,9 @@ export class Chat {
   }
 
   _onScroll() {
+    // Whether the scroll came from the viewer or from auto-scroll, whatever the
+    // pointer was over has moved — drop the tooltip rather than strand it.
+    this._hideEmoteTip();
     if (this._prog || this._destroyed) return;
     const sc = this.scroller;
     const dist = sc.scrollHeight - sc.scrollTop - sc.clientHeight;

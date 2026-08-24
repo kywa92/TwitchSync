@@ -315,6 +315,7 @@
   <li><strong>Python 3.7 or newer.</strong> Nothing else — no packages to install, no build step. macOS includes <code>python3</code> once the developer tools are present; it is also a plain installer on <a href="https://www.python.org">python.org</a>.</li>
   <li><strong>A modern browser</strong> — Chrome, Edge, Brave, Firefox, or Safari. The gameplay files TwitchDownloader produces are H.264/AAC MP4s, which every current browser plays natively.</li>
   <li><strong>VOD files from TwitchDownloader</strong>, described in <a href="#adding">Adding new VODs</a>. Each VOD needs its main <code>.mp4</code> and its chat <code>.json</code> (with embedded images, which is TwitchDownloader&rsquo;s common setup — see the note in that section).</li>
+  <li><strong>ffmpeg — optional but recommended.</strong> Three conveniences use it and are simply skipped without it: library <a href="#thumbnails">thumbnails</a>, the automatic <a href="#chat-check">chat-file check</a>, and <a href="#muted">muted-audio detection</a>. On macOS: <code>brew install ffmpeg</code> (this installs <code>ffprobe</code> too). Core playback never needs it.</li>
 </ul>
 
 <p>There is no minimum hardware beyond &ldquo;can play the video in a browser.&rdquo; The app itself is extremely light; the only briefly heavy moment is parsing the chat file when a VOD opens (a few seconds for a ~90&nbsp;MB chat log).</p>
@@ -355,6 +356,41 @@
     <td>off</td>
     <td>Don&rsquo;t auto-open the browser on startup. The URL is still printed so you can open it yourself.</td>
   </tr>
+  <tr>
+    <td><code>--sync-emotes</code></td>
+    <td>—</td>
+    <td>One-shot: download BTTV/7TV emote sets, then exit. See <a href="#maintenance">Maintenance commands</a>.</td>
+  </tr>
+  <tr>
+    <td><code>--sync-thumbs</code></td>
+    <td>—</td>
+    <td>One-shot: generate every missing library thumbnail, then exit.</td>
+  </tr>
+  <tr>
+    <td><code>--check-chat</code></td>
+    <td>—</td>
+    <td>One-shot: re-verify every VOD/chat pair from scratch and print a report, then exit.</td>
+  </tr>
+</table>
+
+<h3 id="maintenance">Maintenance commands</h3>
+
+<p>These three do their work and exit — they never start the server, so run them from a second Terminal window (or while the app is stopped). All are optional; the app fills in the same data on its own as you use it.</p>
+
+<table class="wrap-ok">
+  <tr><th>Command</th><th>What it does</th></tr>
+  <tr>
+    <td><code>python3 server.py --sync-emotes</code></td>
+    <td>Downloads the 7TV and BTTV channel sets for every streamer in your library, plus both global sets, into <code>emote-cache/</code>. Chat playback then fills in any emote that is <em>missing</em> from a VOD&rsquo;s embedded images. <strong>This is the only command that touches the network</strong>, and re-running it skips what it already has. Playback itself stays entirely offline.</td>
+  </tr>
+  <tr>
+    <td><code>python3 server.py --sync-thumbs</code></td>
+    <td>Generates every missing thumbnail up front into <code>thumb-cache/</code> instead of letting them trickle in as you browse, and prunes cached images whose VOD changed or vanished. Needs ffmpeg.</td>
+  </tr>
+  <tr>
+    <td><code>python3 server.py --check-chat</code></td>
+    <td>Re-runs the chat/VOD pairing check on every VOD from scratch (ignoring cached verdicts) and prints a line per VOD. Needs ffprobe. See <a href="#chat-check">The CHECK badge</a>.</td>
+  </tr>
 </table>
 
 <h3>Examples</h3>
@@ -376,11 +412,42 @@ python3 server.py --port 9000 --no-open</code></pre>
 <!-- ================================================================ -->
 <h2 id="library">5. The library page</h2>
 
-<p>The first page you see is the library: one card per VOD found across all of your library folders. Each card shows the <strong>stream title</strong> (read from the chat file — the real title, not the filename), and a detail line with the <strong>streamer</strong>, the <strong>game</strong>, the <strong>duration</strong>, the <strong>file size</strong>, and the file&rsquo;s date. Cards are sorted newest-first by file date. When you have more than one library folder, each card also carries a small tag showing which folder (and subfolder) the VOD lives in.</p>
+<p>The first page you see is the library: one card per VOD found across all of your library folders. Each card shows a <strong>thumbnail</strong>, the <strong>stream title</strong> (read from the chat file — the real title, not the filename), and a detail line with the <strong>streamer</strong>, the <strong>game</strong>, the <strong>duration</strong>, the <strong>file size</strong>, and the file&rsquo;s date. Anything you have partly watched carries a thin purple progress bar along the bottom of its card. When you have more than one library folder, each card also carries a small tag showing which folder (and subfolder) the VOD lives in.</p>
 
 <p>Clicking a card opens the player. The URL changes to <code>/?v=&lt;video name&gt;</code>, which means each VOD has its own address — you can bookmark a specific VOD, reload mid-watch, or use the browser&rsquo;s back/forward buttons to hop between the library and the player like any normal website.</p>
 
 <p><strong>The library rescans the folder every time you visit it.</strong> Drop a new VOD into the folder, click back to the library (or reload), and it appears. No restart needed.</p>
+
+<p>Coming back from a VOD — with the <strong>&lsaquo;</strong> button, <kbd>Esc</kbd>, or the browser&rsquo;s Back — returns you to the <em>same scroll position</em> in the same sort order you left, so a long library doesn&rsquo;t send you hunting for your place after every video.</p>
+
+<h3 id="sorting">Sorting and filtering</h3>
+
+<p>The toolbar above the list controls what you see and in what order.</p>
+
+<table class="wrap-ok">
+  <tr><th>Control</th><th>What it does</th></tr>
+  <tr>
+    <td><strong>Sort by</strong></td>
+    <td>Order the library by <strong>date</strong>, <strong>file size</strong>, <strong>duration</strong>, <strong>streamer</strong>, or <strong>game</strong>. The arrow beside it flips between ascending and descending; each key starts in its natural direction (newest/largest/longest first, names A→Z). VODs whose duration couldn&rsquo;t be read sort to the end rather than pretending to be 0:00.</td>
+  </tr>
+  <tr>
+    <td><strong>Streamer</strong> / <strong>Game</strong></td>
+    <td>Two filter menus, each a checklist. They are <em>multi-select</em>, so you can ask for Counter-Strike <em>or</em> Escape from Tarkov by ticking both. A badge on the button shows how many values are active, and each entry shows how many VODs it matches. Nothing ticked means no filtering. The game list includes any game a VOD&rsquo;s <em>chapters</em> switched into, not just its headline category, so a stream that moved into a second game is findable under both.</td>
+  </tr>
+  <tr>
+    <td><strong>Reset history</strong></td>
+    <td>Clears every saved playback position at once (after a confirmation). It leaves your other preferences alone. To clear just one VOD, use the small ↺ on its card.</td>
+  </tr>
+  <tr>
+    <td><strong>Autoplay next</strong></td>
+    <td>When ticked, finishing a VOD rolls straight into the next one <em>in the current sort order</em> — so sorting and filtering also define the playlist.</td>
+  </tr>
+</table>
+
+<p>Sorting and filtering are remembered between sessions. If a saved filter no longer matches anything — you filtered by a streamer whose VODs live on a NAS that isn&rsquo;t mounted right now — the library shows everything instead of an empty page, and quietly re-applies the filter when those VODs come back.</p>
+
+<div class="callout tip"><p class="label">Note</p>
+<p>Date sorting uses the <code>[M-D-YY]</code> stamp at the front of the filename (TwitchDownloader&rsquo;s naming), not the file&rsquo;s modification time — so re-downloading or copying a VOD doesn&rsquo;t shuffle it to the top. Files without that stamp fall back to their file date.</p></div>
 
 <h3>What counts as a VOD</h3>
 <p>A VOD appears in the library when <em>both</em> of these files exist in the folder, sharing the same name (the &ldquo;stem&rdquo;):</p>
@@ -388,7 +455,34 @@ python3 server.py --port 9000 --no-open</code></pre>
   <li><code>Some Stream Title.mp4</code> — the gameplay video</li>
   <li><code>Some Stream Title.json</code> — the chat log</li>
 </ul>
-<p>Extensions are matched case-insensitively, so <code>.json</code>, <code>.Json</code>, and <code>.JSON</code> all pair correctly (TwitchDownloader has emitted more than one casing over the years). Any <code>.mp4</code> with <code>&nbsp;-&nbsp;CHAT</code> in its name is deliberately ignored — that&rsquo;s TwitchDownloader&rsquo;s <em>rendered chat video</em>, which TwitchSync doesn&rsquo;t need (see <a href="#faq">FAQ</a> about deleting them). An <code>.mp4</code> with no matching chat file is also skipped, since there would be no chat to show.</p>
+<p>Extensions are matched case-insensitively, so <code>.json</code>, <code>.Json</code>, and <code>.JSON</code> all pair correctly (TwitchDownloader has emitted more than one casing over the years). Any <code>.mp4</code> with <code>&nbsp;-&nbsp;CHAT</code> in its name is deliberately ignored — that&rsquo;s TwitchDownloader&rsquo;s <em>rendered chat video</em>, which TwitchSync doesn&rsquo;t need (see <a href="#faq">FAQ</a> about deleting them). A file with no partner isn&rsquo;t thrown away either — see <a href="#unpaired">Unpaired files</a> just below.</p>
+
+<h3 id="unpaired">Unpaired files</h3>
+
+<p>A download can easily end up half-finished: the video arrives and the chat never does, or a chat log outlives the video you deleted. Those used to vanish from the library silently, which made it hard to notice a gap in your archive.</p>
+
+<p>Now any <code>.mp4</code> or <code>.json</code> whose name begins with a <code>[M-D-YY]</code> date stamp but has no partner is collected into an <strong>Unpaired files</strong> section at the bottom of the library, styled in amber, with a chip saying which half is missing. The same list is printed in the Terminal each time the server starts, so it doubles as a startup report on your library&rsquo;s health.</p>
+
+<ul>
+  <li><strong>An unpaired video still plays.</strong> Click it and it opens normally — with the chat column hidden entirely, since there is no chat to show. (Some people burn chat into the video itself, so an empty chat pane would just be wasted space.) Its title comes from the filename and its duration is read from the video.</li>
+  <li><strong>An unpaired chat log</strong> is listed for information only — there is no video to play.</li>
+</ul>
+
+<p>The date-stamp requirement is what keeps this list quiet and useful: ordinary files that happen to live in a library folder — <code>folders.json</code>, notes, unrelated videos — are not VOD halves and never appear. Supply the missing partner and the pair simply joins the main library on the next scan.</p>
+
+<h3 id="thumbnails">Thumbnails</h3>
+
+<p>Each card&rsquo;s thumbnail is a frame taken from the middle of the VOD, extracted once with ffmpeg and cached in <code>thumb-cache/</code>, so a library only pays that cost the first time. They fill in a couple at a time while you browse; <code>--sync-thumbs</code> generates them all up front instead. A VOD still copying to a NAS has no readable frame yet and shows a dim ▶ placeholder until it finishes.</p>
+
+<p>Without ffmpeg the app falls back to grabbing frames in the browser, which also works but is slower — and on macOS makes the audio device click once per thumbnail, which is exactly why the ffmpeg path is preferred.</p>
+
+<h3 id="chat-check">The CHECK badge</h3>
+
+<p>Matching filenames don&rsquo;t guarantee matching content: a partial or mis-filed download can leave an MP4 sitting next to a chat log from a <em>different</em> (usually shorter) stream, and everything would look fine until the chat drifted nonsensically against the video.</p>
+
+<p>So on every start the server quietly checks each pair in the background: it compares the length the chat file <em>claims</em> the video is against the MP4&rsquo;s real duration, and it notices a chat log that stops long before the video ends. Anything suspect gets an amber <strong>CHECK</strong> chip on its library card, and the toolbar shows a count you can click to jump to the first one. It is a warning, not a verdict — the VOD plays normally, and you decide whether to re-download.</p>
+
+<p>Verdicts are cached in <code>chat-check.json</code> keyed to both files, so only new or changed VODs are ever re-checked, and the pass costs seconds rather than minutes. It needs <code>ffprobe</code>; without it the check is skipped and no badges appear.</p>
 
 <h3 id="folders">Library folders (adding a NAS or external drive)</h3>
 
@@ -459,9 +553,9 @@ python3 server.py --port 9000 --no-open</code></pre>
     </div>
   </div>
   <ul class="legend">
-    <li><span class="n">1</span><strong>Video stage.</strong> The gameplay video, letterboxed on black so nothing is ever cropped. Click it to play/pause; double-click it for fullscreen.</li>
-    <li><span class="n">2</span><strong>Chat column.</strong> The stream&rsquo;s chat, rendered live from the log and always showing the messages for the current video time. The <strong>&lsaquo;</strong> button in its header returns to the library.</li>
-    <li><span class="n">3</span><strong>Control bar.</strong> One set of controls for everything, spanning the full window: play/pause, elapsed&nbsp;/&nbsp;total time, the seek bar with the chat-activity graph, playback speed, volume, and fullscreen.</li>
+    <li><span class="n">1</span><strong>Video stage.</strong> The gameplay video, letterboxed on black by default so nothing is ever cropped — or filling the frame if you turn on <a href="#zoom">Fill screen</a>. Click it to play/pause; double-click it for fullscreen; scroll to zoom and drag to pan.</li>
+    <li><span class="n">2</span><strong>Chat column.</strong> The stream&rsquo;s chat, rendered live from the log and always showing the messages for the current video time. The <strong>&lsaquo;</strong> button in its header returns to the library, and the <strong>gear</strong> opens <a href="#chat-settings">chat settings</a> (timestamps, name length, column width). VODs without a chat file open without this column at all.</li>
+    <li><span class="n">3</span><strong>Control bar.</strong> One set of controls for everything, spanning the full window: play/pause, elapsed&nbsp;/&nbsp;total time, the seek bar with the chat-activity graph, autoplay, loop, playback speed, zoom, volume, and fullscreen.</li>
   </ul>
 </div>
 
@@ -534,13 +628,44 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <p>After a big jump you may see a spinner for a moment while the browser fetches video data around the new position — normal for very large files, and usually gone in a second or two.</p>
 
+<h3 id="muted">Muted audio stretches</h3>
+
+<p>Twitch mutes parts of a VOD when its system detects copyrighted music, and nothing in the chat log records where those stretches are. TwitchSync works them out itself: in the background it reads each VOD&rsquo;s audio once with ffmpeg and notes every run of true digital silence longer than <strong>two minutes</strong> (short quiet moments and low-volume passages are deliberately ignored, so ordinary silence never gets flagged).</p>
+
+<p>Those stretches are drawn as <strong>light red bars on the seek bar</strong>, so you can see a dead patch coming before you reach it. While the playhead is actually inside one, a small notice appears just above the controls:</p>
+
+<p style="text-align:center; margin: 14px 0;"><span style="display:inline-block; background:rgba(0,0,0,.85); border:1px solid #3f3f46; border-radius:999px; padding:6px 14px; font-size:12.5px;">source audio muted until <u>0:42:15</u></span></p>
+
+<p>The timestamp is a link — click it and the playhead jumps to the moment the audio comes back, so you can skip a ten-minute music block without hunting for its end.</p>
+
+<p>Scanning a VOD means reading the whole file once, which takes a while on a big file over a network share, so results are cached permanently in <code>mute-scan.json</code> and a file is never read twice. Whichever VOD you open jumps to the front of the queue, and the rest of the library is worked through one file at a time in the background. If a VOD you just opened hasn&rsquo;t been scanned yet, its bars simply appear once the scan finishes. Needs ffmpeg; without it the feature is absent.</p>
+
+<h3 id="zoom">Zoom and pan</h3>
+
+<p>The magnifier in the control bar opens a small zoom panel. This is a view control, not a file operation — nothing is ever re-encoded or written.</p>
+
+<ul>
+  <li><strong>Zoom slider</strong> — 100 % to 400 %. You can also <strong>scroll the mouse wheel over the video</strong>, which zooms around wherever the pointer is rather than the centre, so you can push into a corner of the screen directly.</li>
+  <li><strong>Drag to pan.</strong> Once the picture is larger than the player, dragging it moves the view (the cursor turns into a grab hand). Panning stops at the edges of the picture, so you can never drag the image off into empty black. A drag never counts as a click, so it won&rsquo;t pause playback.</li>
+  <li><strong>Fill screen</strong> — the option most people want permanently on. It scales the picture just enough to <em>cover</em> the player, cropping the black bars away entirely. It is worked out per video from its actual shape, and recalculated whenever the window changes, you enter fullscreen, or you resize the chat column — so it keeps filling rather than going stale.</li>
+  <li><strong>Reset</strong> returns the slider to 100 % and re-centres. It leaves <em>Fill screen</em> alone, because that one is a standing preference rather than part of the current framing.</li>
+</ul>
+
+<p>Fill screen is remembered across VODs and restarts. The zoom slider and pan position are per-viewing and start fresh each time you open a video, since the right framing depends on what you&rsquo;re watching.</p>
+
+<div class="callout tip"><p class="label">Tip</p>
+<p>Fill screen is the fix for a stream that was recorded with black bars baked in — an ultrawide streamer, a 4:3 retro game, or a source that was pillarboxed on Twitch&rsquo;s side. Turn it on once and every VOD fills the player from then on.</p></div>
+
 <h3>The buttons row</h3>
 
 <table class="wrap-ok">
   <tr><th>Control</th><th>Behavior</th></tr>
   <tr><td><strong>Play / pause</strong></td><td>Toggles playback. The icon reflects the current state. Clicking the video itself does the same thing.</td></tr>
   <tr><td><strong>Time readout</strong></td><td><code>elapsed / total</code>, e.g. <code>3:00:15&nbsp;/&nbsp;6:47:26</code>. Uses <code>H:MM:SS</code> whenever the VOD is an hour or longer. While you drag the seek bar it previews the target time.</td></tr>
+  <tr><td><strong>Autoplay next</strong></td><td>When lit, the end of a VOD rolls straight into the next one in the library&rsquo;s current sort order. The same switch appears on the library toolbar — it&rsquo;s one setting in two places.</td></tr>
+  <tr><td><strong>Loop</strong></td><td>Repeats the current VOD instead of ending. Deliberately <em>not</em> remembered — it resets every time you open a video, so a loop you set once can never surprise you later.</td></tr>
   <tr><td><strong>Speed</strong> (<code>1×</code>)</td><td>Opens a menu: 0.25× — 2× with &ldquo;Normal&rdquo; = 1×. Your choice is remembered for future sessions. Audio stays pitch-corrected (a browser feature), so voices sound natural at 1.25–1.5×.</td></tr>
+  <tr><td><strong>Zoom</strong> (magnifier)</td><td>Opens the zoom panel — zoom slider, <em>Fill screen</em>, and Reset. See <a href="#zoom">Zoom and pan</a> above.</td></tr>
   <tr><td><strong>Mute + volume</strong></td><td>The speaker button toggles mute; the slider sets volume. Moving the slider un-mutes. Both are remembered across sessions.</td></tr>
   <tr><td><strong>Fullscreen</strong></td><td>Expands the <em>whole layout</em> — video, chat, and controls — to the screen, so you keep chat while fullscreen, just like Twitch&rsquo;s theater-plus-chat. While playing in fullscreen the controls fade out after 3 seconds of no mouse movement (and the cursor hides); move the mouse or press any shortcut to bring them back. <kbd>F</kbd> or <kbd>Esc</kbd> exits.</td></tr>
 </table>
@@ -585,6 +710,31 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <p>To keep the page fast over a six-hour stream, only the most recent couple hundred messages stay in the column (a bit more while you&rsquo;re reading back). Older ones are dropped from view — seek backward any time to revisit them.</p>
 
+<h3 id="chat-settings">Chat settings</h3>
+
+<p>The gear at the top-right of the chat column opens three display options. All of them apply <em>immediately</em> — including to messages already on screen — and are remembered across VODs and restarts.</p>
+
+<table class="wrap-ok">
+  <tr><th>Setting</th><th>What it does</th></tr>
+  <tr>
+    <td><strong>Show message timestamps</strong></td>
+    <td>On by default. Turn it off to drop the <code>3:00:15</code> in front of every message and reclaim that width for the messages themselves.</td>
+  </tr>
+  <tr>
+    <td><strong>Shorten names to first letter</strong></td>
+    <td>Collapses every display name down to its initial — <em>&ldquo;M: nice shot&rdquo;</em> instead of <em>&ldquo;Moderator_Mike: nice shot&rdquo;</em> — which claws back a lot of horizontal space in a narrow column, and makes a fast chat much easier to skim. <strong>Badges are kept</strong>, so moderators, subscribers and bots are still identifiable at a glance. Hover any message and that name slides back out to its full length, then slides away when you move off.</td>
+  </tr>
+  <tr>
+    <td><strong>Chat width</strong></td>
+    <td>Sets the column&rsquo;s width as a percentage of the window, from 15 % to 50 %, and the video takes the rest. It applies live as you drag the slider, so you can dial in the split while watching. Because it&rsquo;s a percentage, the balance holds when you resize the window or go fullscreen.</td>
+  </tr>
+</table>
+
+<p><strong>Reset to defaults</strong> at the bottom of the panel puts all three back (timestamps on, full names, default width).</p>
+
+<div class="callout tip"><p class="label">Note</p>
+<p>A VOD with no chat file — an <a href="#unpaired">unpaired video</a> — opens with the chat column removed altogether and the video across the full width. The gear goes with it, and a back arrow appears in the control bar instead.</p></div>
+
 <!-- ================================================================ -->
 <h2 id="memory">11. Resume &amp; remembered settings</h2>
 
@@ -595,7 +745,13 @@ python3 server.py --port 9000 --no-open</code></pre>
   <tr><td><strong>Playback position</strong> (per VOD)</td><td>Saved every few seconds while you watch and when you pause or leave. Reopen the VOD — even after a reboot — and it resumes where you left off, with a brief <em>&ldquo;Resumed at 3:00:15&rdquo;</em> toast. Positions in the first 10 seconds aren&rsquo;t saved, and finishing a VOD (or stopping within the last minute) clears its position so next time starts fresh.</td></tr>
   <tr><td><strong>Volume &amp; mute</strong></td><td>Whatever you set last time is applied to every VOD.</td></tr>
   <tr><td><strong>Playback speed</strong></td><td>Also remembered globally, so your preferred 1.25× sticks.</td></tr>
+  <tr><td><strong>Autoplay next</strong></td><td>The switch shared by the library toolbar and the control bar.</td></tr>
+  <tr><td><strong>Sort &amp; filters</strong></td><td>Your sort key and direction, plus any streamer/game filters, are restored the next time you open the library.</td></tr>
+  <tr><td><strong>Chat settings</strong></td><td>Timestamps, shortened names, and the chat column&rsquo;s width.</td></tr>
+  <tr><td><strong>Fill screen</strong></td><td>The crop-the-black-bars option from the zoom panel. The zoom slider and pan position are <em>not</em> remembered — they start fresh per video on purpose.</td></tr>
 </table>
+
+<p>Deliberately <em>not</em> remembered: <strong>loop</strong> (resets each time a video opens) and the <strong>zoom/pan framing</strong> (specific to what you were looking at).</p>
 
 <div class="callout tip"><p class="label">Note</p>
 <p>Positions are keyed by the VOD&rsquo;s filename. If you rename a VOD pair, its saved position resets. Different browsers (or private windows) each have their own memory.</p></div>
@@ -609,7 +765,11 @@ python3 server.py --port 9000 --no-open</code></pre>
   <li><strong>Click the video to pause, double-click for fullscreen</strong> — the muscle memory from every other player works here.</li>
   <li><strong>Bookmark VODs.</strong> Each VOD&rsquo;s player URL (<code>/?v=…</code>) is stable. Combined with auto-resume, one bookmark drops you exactly where you stopped last night.</li>
   <li><strong>Speed through downtime.</strong> Queue times and loading screens fly by at 2× (<kbd>L</kbd> to lunge forward 10&nbsp;s at a time), then <kbd>Space</kbd> and back to Normal when the action starts.</li>
-  <li><strong>Watching on a laptop?</strong> Below ~1100&nbsp;px of window width the chat column narrows automatically so the video keeps most of the room.</li>
+  <li><strong>Watching on a laptop?</strong> Below ~1100&nbsp;px of window width the chat column narrows automatically so the video keeps most of the room — or set the width yourself in <a href="#chat-settings">chat settings</a>.</li>
+  <li><strong>Kill the black bars for good.</strong> Turn on <em>Fill screen</em> in the zoom panel once and every VOD crops to fill the player from then on. Pair it with a narrower chat column if you want the video as large as possible.</li>
+  <li><strong>Build a themed session.</strong> Filter to one game (or a couple), sort by date, and tick <em>Autoplay next</em> — the filtered, sorted list becomes the playlist and plays through on its own.</li>
+  <li><strong>Skim a busy chat.</strong> In a narrow column, <em>Shorten names to first letter</em> roughly doubles the room for the messages themselves; hover any line when you need to know who said it.</li>
+  <li><strong>Jump the music blocks.</strong> Red bars on the seek bar are muted stretches — when you land in one, click the timestamp in the notice to skip straight to where the audio returns.</li>
   <li><strong>Reclaim disk space.</strong> Once you&rsquo;re happy with TwitchSync, the old <code>…&nbsp;-&nbsp;CHAT.mp4</code> renders are dead weight — several GB each that the app never touches.</li>
   <li><strong>Keep names in sync when renaming.</strong> If you tidy up filenames, rename the <code>.mp4</code> and <code>.json</code> identically or the pair won&rsquo;t be matched.</li>
 </ul>
@@ -625,7 +785,9 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <h3>A VOD doesn&rsquo;t appear in the library</h3>
 <ol>
+  <li><strong>Look at the bottom of the page first.</strong> If the video is listed under <a href="#unpaired">Unpaired files</a>, its chat JSON is missing or misnamed — that tells you immediately which half to chase. (You can still watch it from there, without chat.)</li>
   <li>Check the pair: is there a chat file whose name matches the <code>.mp4</code> <em>exactly</em>, aside from the extension? One character off (a stray space, a missing bracket) breaks the match. Extension casing does <em>not</em> matter.</li>
+  <li>Check the toolbar filters — a leftover streamer or game filter will hide everything else. The filter buttons show a count badge when they&rsquo;re active.</li>
   <li>Make sure the video&rsquo;s filename doesn&rsquo;t contain <code>&nbsp;-&nbsp;CHAT</code> — those are treated as chat renders and hidden on purpose.</li>
   <li>Confirm both files are inside one of your library folders — open <strong>Folders</strong> to see the exact paths and per-folder counts.</li>
   <li>If the VOD is nested more than four folders deep inside a library folder, add its own folder directly instead.</li>
@@ -649,6 +811,12 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <h3>After a big seek the video hangs on a spinner for a while</h3>
 <p>Seeking into an unbuffered region of a 20+&nbsp;GB file makes the browser fetch fresh data around the target and hunt for the nearest keyframe. On a local disk that&rsquo;s typically well under a couple of seconds. If it&rsquo;s persistently slow, check that the VOD file isn&rsquo;t on a nearly-full or failing drive, and that nothing else is hammering the disk.</p>
+
+<h3>&ldquo;The video could not be decoded&rdquo; / playback stopped by itself</h3>
+<p>A single corrupt or damaged spot in a huge download can stop a browser dead. The player now handles this on its own: it reloads the video, resumes where it stopped, and if the same spot keeps failing it nudges progressively further past it (1&nbsp;s, 2&nbsp;s, 5&nbsp;s…), showing a brief <em>&ldquo;Recovered playback&rdquo;</em> toast each time. The same recovery covers a dropped connection — stopping and restarting the server mid-watch reconnects by itself. You only see the error box if several attempts in the same spot all fail, which usually means that part of the file is genuinely damaged: seek past it manually, and consider re-downloading the VOD.</p>
+
+<h3>The red bars / muted-audio notice never appear</h3>
+<p>The muted-audio scan needs ffmpeg (<code>brew install ffmpeg</code>) — without it the feature is silently absent. With it, remember the first pass has to read each VOD&rsquo;s audio all the way through, which takes a while for a big file on a network share; a VOD you just opened is pushed to the front of the queue, and its bars appear as soon as its scan finishes. If a VOD genuinely has no muted stretches longer than two minutes, there is nothing to draw.</p>
 
 <h3>Playback stutters at 1.75×–2×</h3>
 <p>Decoding 1080p60 video faster than real time is CPU-intensive in some browsers. Drop the speed a notch, or close other heavy tabs. (Playback at Normal speed is far lighter than the old two-videos-at-once approach, so if Normal stutters, something else is loading the machine.)</p>
@@ -703,20 +871,25 @@ python3 server.py --port 9000 --no-open</code></pre>
     <table>
       <tr><th>Route</th><th>Purpose</th></tr>
       <tr><td><code>/</code>, <code>/static/…</code></td><td>The app itself (HTML/CSS/JS).</td></tr>
-      <tr><td><code>/api/videos</code></td><td>Rescans every library folder, pairs files, returns the combined listing as JSON.</td></tr>
+      <tr><td><code>/api/videos</code></td><td>Rescans every library folder, pairs files, returns the combined listing — plus the unpaired leftovers — as JSON.</td></tr>
       <tr><td><code>/api/folders</code></td><td>Lists library folders (plus mounted volumes as suggestions); <code>POST</code> adds or removes one.</td></tr>
       <tr><td><code>/media?v=…</code></td><td>Streams the MP4 with full HTTP <code>Range</code> support (<code>206 Partial Content</code>).</td></tr>
       <tr><td><code>/chat?v=…</code></td><td>Streams the chat JSON with a known length, so the loading bar can show a real percentage.</td></tr>
+      <tr><td><code>/thumb?v=…</code></td><td>Serves a cached thumbnail, or generates one on request (<code>&amp;gen=1</code>) with ffmpeg.</td></tr>
+      <tr><td><code>/api/chat-check</code></td><td>Progress and results of the background chat/VOD pairing check, polled while it runs.</td></tr>
+      <tr><td><code>/api/muted</code></td><td>The muted stretches of one VOD: <code>ok</code> with the list, or <code>pending</code> — and asking is what promotes that VOD to the front of the scan queue.</td></tr>
+      <tr><td><code>/emotes/…</code></td><td>Emotes from the local <code>emote-cache/</code>, used to fill gaps in a VOD&rsquo;s embedded set.</td></tr>
     </table>
   </li>
   <li><strong>Range requests are the load-bearing feature.</strong> TwitchDownloader MP4s keep their index (the <code>moov</code> atom) at the <em>end</em> of the file, so a browser must fetch the tail before it can play anything, and every seek needs bytes from an arbitrary offset. The server implements the full single-range semantics — open-ended, bounded, and suffix ranges, <code>416</code> for unsatisfiable requests — and streams in 1&nbsp;MB chunks.</li>
   <li><strong>Library metadata without the 90&nbsp;MB read:</strong> the streamer/title/game/length live in the first kilobyte of the chat JSON, so the listing parses just the head of each file (64&nbsp;KB) and caches the result until the file changes.</li>
   <li><strong>Safety:</strong> the <code>v=</code> parameter is a dictionary key into the scan results — never a filesystem path — with a resolved-path containment check besides; the media folder can&rsquo;t be escaped. Aborted connections (constant while scrubbing) are swallowed silently instead of spamming tracebacks.</li>
+  <li><strong>Background passes.</strong> Two run on their own threads after startup so nothing blocks the UI: the chat/VOD check (fast — it only reads each file&rsquo;s header and asks ffprobe for a duration), then the muted-audio scan, which is deliberately gated behind it and processes one file at a time so a full-library sweep never competes with playback for a network share. Both cache to disk keyed on each file&rsquo;s size and modification time, so a re-download re-checks itself and nothing else is ever repeated. Neither ever writes to your VOD folders.</li>
 </ul>
 
 <h3>The frontend (<code>static/</code>)</h3>
 <ul>
-  <li>Vanilla ES modules, no framework, no build: <code>main.js</code> (routing/lifecycle), <code>library.js</code> (picker), <code>player.js</code> (video, controls, seek bar, fullscreen, shortcuts, resume), <code>chat.js</code> (the chat engine), <code>util.js</code> (helpers).</li>
+  <li>Vanilla ES modules, no framework, no build: <code>main.js</code> (routing/lifecycle), <code>library.js</code> (picker, sorting, filters, unpaired list), <code>player.js</code> (video, controls, seek bar, zoom/pan, fullscreen, shortcuts, resume, error recovery), <code>chat.js</code> (the chat engine and its settings), <code>thumbs.js</code> (the thumbnail queue), <code>util.js</code> (helpers).</li>
   <li><strong>Chat pipeline:</strong> download with streamed progress → parse → unpack embedded images into blob URLs (sniffing PNG/GIF/WebP per image) → index every message timestamp into a typed array. Seeks binary-search that index and rebuild the column with ~50 messages of backfill; playback advances a cursor and appends messages in batches on the video&rsquo;s <code>timeupdate</code> ticks. The DOM stays capped to the most recent ~200 messages (~500 while you read scrollback) so a 20,000-message stream stays smooth.</li>
   <li><strong>Commit-on-release scrubbing:</strong> assigning <code>currentTime</code> aborts in-flight range requests, opens new ones, and forces a keyframe hunt — dozens of those per drag would stutter, so the drag only previews and the seek fires once on release.</li>
   <li>Emote handling mirrors Twitch semantics: first-party emotes are matched by ID from the message&rsquo;s fragments, third-party (BTTV/FFZ/7TV) by name against words in the text, and zero-width emotes stack on the previous emote via absolute positioning.</li>
@@ -730,9 +903,13 @@ python3 server.py --port 9000 --no-open</code></pre>
   <tr><td><code>server.py</code></td><td>The whole backend. Run this.</td></tr>
   <tr><td><code>static/index.html</code></td><td>The single page hosting both the library and the player.</td></tr>
   <tr><td><code>static/style.css</code></td><td>All styling (dark theme).</td></tr>
-  <tr><td><code>static/js/*.js</code></td><td>The frontend modules (<code>main</code>, <code>library</code>, <code>player</code>, <code>chat</code>, <code>util</code>).</td></tr>
+  <tr><td><code>static/js/*.js</code></td><td>The frontend modules (<code>main</code>, <code>library</code>, <code>player</code>, <code>chat</code>, <code>thumbs</code>, <code>util</code>).</td></tr>
   <tr><td><code>icon.png</code></td><td>The project logo, shown in the library page header. Served at <code>/icon.png</code>.</td></tr>
   <tr><td><code>folders.json</code></td><td>Your added library folders, written by the app. Delete it to reset to just the project folder.</td></tr>
+  <tr><td><code>thumb-cache/</code></td><td>Generated library thumbnails. Safe to delete — they regenerate on demand.</td></tr>
+  <tr><td><code>emote-cache/</code></td><td>BTTV/7TV emotes downloaded by <code>--sync-emotes</code>, plus a manifest. Safe to delete; chat then falls back to each VOD&rsquo;s embedded emotes only.</td></tr>
+  <tr><td><code>chat-check.json</code></td><td>Cached verdicts from the chat/VOD pairing check. Safe to delete — everything is simply re-checked next start.</td></tr>
+  <tr><td><code>mute-scan.json</code></td><td>Cached muted-audio stretches per VOD. Safe to delete, but the library then has to be re-scanned from scratch, which is the slow one.</td></tr>
   <tr><td><code>&lt;VOD&nbsp;name&gt;.mp4</code></td><td>A gameplay video. Appears in the library when its <code>.json</code> twin exists.</td></tr>
   <tr><td><code>&lt;VOD&nbsp;name&gt;.json</code></td><td>The matching chat log with embedded emotes/badges.</td></tr>
   <tr><td><code>&lt;VOD&nbsp;name&gt;&nbsp;-&nbsp;CHAT.mp4</code></td><td>TwitchDownloader&rsquo;s rendered chat video. Ignored by the app; safe to delete.</td></tr>
@@ -744,7 +921,7 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <footer>
   <a class="back-to-top" href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">Back to top ↑</a>
-  TwitchSync User Guide · August 2026 · This file is self-contained — it opens directly from the folder in any browser.
+  TwitchSync User Guide · Updated August 2026 · This file is self-contained — it opens directly from the folder in any browser.
 </footer>
 
 </main>
