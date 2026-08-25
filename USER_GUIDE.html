@@ -712,7 +712,7 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <h3 id="chat-settings">Chat settings</h3>
 
-<p>The gear at the top-right of the chat column opens three display options. All of them apply <em>immediately</em> — including to messages already on screen — and are remembered across VODs and restarts.</p>
+<p>The gear at the top-right of the chat column opens six options. All of them apply <em>immediately</em> — including to messages already on screen — and are remembered across VODs and restarts.</p>
 
 <table class="wrap-ok">
   <tr><th>Setting</th><th>What it does</th></tr>
@@ -725,12 +725,24 @@ python3 server.py --port 9000 --no-open</code></pre>
     <td>Collapses every display name down to its initial — <em>&ldquo;M: nice shot&rdquo;</em> instead of <em>&ldquo;Moderator_Mike: nice shot&rdquo;</em> — which claws back a lot of horizontal space in a narrow column, and makes a fast chat much easier to skim. <strong>Badges are kept</strong>, so moderators, subscribers and bots are still identifiable at a glance. Hover any message and that name slides back out to its full length, then slides away when you move off.</td>
   </tr>
   <tr>
+    <td><strong>Hide Chat Bot messages</strong></td>
+    <td>Hides every message from a chatter carrying Twitch&rsquo;s <em>Chat Bot</em> badge — Fossabot, StreamElements, Nightbot and the like. Useful when a channel&rsquo;s bot posts a link or a reminder every few minutes and you only want to read the humans. It goes by the badge on the message rather than guessing from usernames, so a person with &ldquo;bot&rdquo; in their name is never caught by it.</td>
+  </tr>
+  <tr>
+    <td><strong>Hide <code>!</code> commands</strong></td>
+    <td>Hides messages that <em>begin</em> with a bang — <code>!match</code>, <code>!followage</code>, <code>!uptime</code>, <code>!drops</code> — which are viewers talking to a bot rather than to the stream. Only a leading bang counts: <em>&ldquo;hey !match was close&rdquo;</em> stays, and so does plain excitement like <code>!!!</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>Draw chat over the video</strong></td>
+    <td>Turns the chat column into an overlay: its panel background disappears, the video widens to fill the whole window, and the messages are drawn straight on top of the picture — the way chat sits over gameplay in a stream layout. A <strong>Chat opacity</strong> slider (20&nbsp;%–100&nbsp;%) appears alongside it so you can fade the text and emotes back until they sit quietly over the action; messages get a soft dark outline so they stay readable over a bright scene. The header, back arrow and this gear stay at full strength so the controls never become hard to find. In this mode <em>Chat width</em> sets how much of the video chat is drawn across, and a VOD with no chat file is unaffected.</td>
+  </tr>
+  <tr>
     <td><strong>Chat width</strong></td>
     <td>Sets the column&rsquo;s width as a percentage of the window, from 15 % to 50 %, and the video takes the rest. It applies live as you drag the slider, so you can dial in the split while watching. Because it&rsquo;s a percentage, the balance holds when you resize the window or go fullscreen.</td>
   </tr>
 </table>
 
-<p><strong>Reset to defaults</strong> at the bottom of the panel puts all three back (timestamps on, full names, default width).</p>
+<p><strong>Reset to defaults</strong> at the bottom of the panel puts them all back (timestamps on, full names, nothing hidden, default width).</p>
 
 <div class="callout tip"><p class="label">Note</p>
 <p>A VOD with no chat file — an <a href="#unpaired">unpaired video</a> — opens with the chat column removed altogether and the video across the full width. The gear goes with it, and a back arrow appears in the control bar instead.</p></div>
@@ -747,7 +759,7 @@ python3 server.py --port 9000 --no-open</code></pre>
   <tr><td><strong>Playback speed</strong></td><td>Also remembered globally, so your preferred 1.25× sticks.</td></tr>
   <tr><td><strong>Autoplay next</strong></td><td>The switch shared by the library toolbar and the control bar.</td></tr>
   <tr><td><strong>Sort &amp; filters</strong></td><td>Your sort key and direction, plus any streamer/game filters, are restored the next time you open the library.</td></tr>
-  <tr><td><strong>Chat settings</strong></td><td>Timestamps, shortened names, and the chat column&rsquo;s width.</td></tr>
+  <tr><td><strong>Chat settings</strong></td><td>Timestamps, shortened names, the bot and <code>!</code>-command filters, and the chat column&rsquo;s width.</td></tr>
   <tr><td><strong>Fill screen</strong></td><td>The crop-the-black-bars option from the zoom panel. The zoom slider and pan position are <em>not</em> remembered — they start fresh per video on purpose.</td></tr>
 </table>
 

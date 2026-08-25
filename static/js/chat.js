@@ -5,6 +5,15 @@
 import { el, fmtTime, colorHash, readableColor, upperBound, sniffImageMime,
          lsGet, lsSet, lsDel } from "./util.js";
 
+// Twitch's bot badge, verified against a real TwitchDownloader log: the badge
+// id is "bot-badge" and its title is "Chat Bot". The title is the friendlier
+// check, the id is the fallback for logs downloaded without badge images.
+const BOT_BADGE_ID = "bot-badge";
+const BOT_BADGE_TITLE = "Chat Bot";
+// "!match", "!followage" — a command needs a word character after the bang, so
+// plain excitement ("!!!") is never mistaken for one.
+const CMD_RE = /^\s*![a-z0-9]/i;
+
 const PIN_CAP = 200;      // max messages in DOM while pinned to bottom
 const UNPIN_CAP = 500;    // hard bound while the user reads scrollback
 const BACKFILL = 50;      // messages rendered above the seek point for context
@@ -19,12 +28,17 @@ const $ = (id) => document.getElementById(id);
 const CHAT_W_MIN = 15;  // percent of the window; keep both ends usable
 const CHAT_W_MAX = 50;
 const CHAT_W_DEFAULT = 30; // ≈ the stylesheet's 380px at a typical window
+const CHAT_OP_MIN = 20;    // percent; below this the text is unreadable over video
+const CHAT_OP_MAX = 100;
+const CHAT_OP_DEFAULT = 75;
 let csBound = false;
 
 // Non-finite input (a garbled stored value, or a measurement taken while the
 // window reports zero width) falls back to the default instead of NaN.
 const clampChatWidth = (w) =>
   Number.isFinite(w) ? Math.min(CHAT_W_MAX, Math.max(CHAT_W_MIN, Math.round(w))) : CHAT_W_DEFAULT;
+const clampChatOpacity = (o) =>
+  Number.isFinite(o) ? Math.min(CHAT_OP_MAX, Math.max(CHAT_OP_MIN, Math.round(o))) : CHAT_OP_DEFAULT;
 
 export function applyChatSettings() {
   const col = $("chat-col");
@@ -32,6 +46,11 @@ export function applyChatSettings() {
   if (!col || !view) return;
   col.classList.toggle("hide-ts", lsGet("ts.chatTimestamps") === "0");
   col.classList.toggle("short-names", lsGet("ts.chatShortNames") === "1");
+  col.classList.toggle("hide-bots", lsGet("ts.chatHideBots") === "1");
+  col.classList.toggle("hide-cmds", lsGet("ts.chatHideCmds") === "1");
+  view.classList.toggle("chat-overlay", lsGet("ts.chatOverlay") === "1");
+  view.style.setProperty("--chat-op",
+    String(clampChatOpacity(parseFloat(lsGet("ts.chatOpacity"))) / 100));
   const w = parseFloat(lsGet("ts.chatWidth"));
   // No stored width: drop the override so the stylesheet's responsive default
   // (380px, 300px on narrow windows) takes over again.
@@ -48,12 +67,27 @@ export function setupChatSettings() {
   const pop = $("chat-settings-pop");
   const tsBox = $("cs-timestamps");
   const shortBox = $("cs-shortnames");
+  const botBox = $("cs-hidebots");
+  const cmdBox = $("cs-hidecmds");
   const width = $("cs-width");
   const widthVal = $("cs-width-val");
+  const overlayBox = $("cs-overlay");
+  const opRange = $("cs-opacity");
+  const opVal = $("cs-op-val");
+  const opBlock = $("cs-op-block");
 
   const syncControls = () => {
     tsBox.checked = lsGet("ts.chatTimestamps") !== "0";
     shortBox.checked = lsGet("ts.chatShortNames") === "1";
+    botBox.checked = lsGet("ts.chatHideBots") === "1";
+    cmdBox.checked = lsGet("ts.chatHideCmds") === "1";
+    overlayBox.checked = lsGet("ts.chatOverlay") === "1";
+    // The opacity slider only means anything in overlay mode, so it appears
+    // with it rather than sitting there inert.
+    opBlock.hidden = !overlayBox.checked;
+    const op = clampChatOpacity(parseFloat(lsGet("ts.chatOpacity")));
+    opRange.value = String(op);
+    opVal.textContent = op + "%";
     const stored = parseFloat(lsGet("ts.chatWidth"));
     // Unset: seed the slider from the column's real width so it starts under
     // the viewer's thumb instead of jumping on the first drag.
@@ -91,6 +125,25 @@ export function setupChatSettings() {
     lsSet("ts.chatShortNames", shortBox.checked ? "1" : "0");
     applyChatSettings();
   });
+  botBox.addEventListener("change", () => {
+    lsSet("ts.chatHideBots", botBox.checked ? "1" : "0");
+    applyChatSettings();
+  });
+  cmdBox.addEventListener("change", () => {
+    lsSet("ts.chatHideCmds", cmdBox.checked ? "1" : "0");
+    applyChatSettings();
+  });
+  overlayBox.addEventListener("change", () => {
+    lsSet("ts.chatOverlay", overlayBox.checked ? "1" : "0");
+    opBlock.hidden = !overlayBox.checked;
+    applyChatSettings();
+  });
+  opRange.addEventListener("input", () => {
+    const v = clampChatOpacity(parseFloat(opRange.value));
+    opVal.textContent = v + "%";
+    lsSet("ts.chatOpacity", String(v));
+    applyChatSettings();
+  });
   width.addEventListener("input", () => {
     const v = clampChatWidth(parseFloat(width.value));
     widthVal.textContent = v + "%";
@@ -101,6 +154,10 @@ export function setupChatSettings() {
     lsDel("ts.chatWidth");
     lsDel("ts.chatTimestamps");
     lsDel("ts.chatShortNames");
+    lsDel("ts.chatHideBots");
+    lsDel("ts.chatHideCmds");
+    lsDel("ts.chatOverlay");
+    lsDel("ts.chatOpacity");
     applyChatSettings();
     syncControls(); // reflect the restored defaults without closing the panel
   });
@@ -294,8 +351,10 @@ export class Chat {
     msg.append(el("span", "ts", fmtTime(c.content_offset_seconds || 0, this._showHours)));
 
     const m = c.message || {};
+    let isBot = false;
     for (const b of m.user_badges || []) {
       const info = this.badges.get(b._id + "/" + b.version);
+      if (b._id === BOT_BADGE_ID || (info && info.title === BOT_BADGE_TITLE)) isBot = true;
       if (!info) continue;
       const img = new Image(18, 18);
       img.className = "badge";
@@ -322,6 +381,14 @@ export class Chat {
     const body = el("span", "body");
     this._renderBody(body, m);
     msg.append(body);
+
+    // Tagged, not skipped: the filters are CSS, so toggling one takes effect on
+    // messages already rendered instead of waiting for the next rebuild.
+    if (isBot) msg.classList.add("is-bot");
+    const text = typeof m.body === "string" && m.body
+      ? m.body
+      : (m.fragments || []).map((f) => (f && f.text) || "").join("");
+    if (CMD_RE.test(text)) msg.classList.add("is-cmd");
     return msg;
   }
 

@@ -111,6 +111,22 @@
           <input id="cs-shortnames" type="checkbox">
           <span class="cs-label">Shorten names to first letter<span class="cs-hint">Hover a message to reveal the full name</span></span>
         </label>
+        <label class="cs-row">
+          <input id="cs-hidebots" type="checkbox">
+          <span class="cs-label">Hide Chat Bot messages<span class="cs-hint">Anyone carrying the Chat Bot badge</span></span>
+        </label>
+        <label class="cs-row">
+          <input id="cs-hidecmds" type="checkbox">
+          <span class="cs-label">Hide <span class="cs-mono">!</span> commands<span class="cs-hint">Messages starting with ! — !match, !followage…</span></span>
+        </label>
+        <label class="cs-row">
+          <input id="cs-overlay" type="checkbox">
+          <span class="cs-label">Draw chat over the video<span class="cs-hint">Drops the chat panel background and widens the video behind it</span></span>
+        </label>
+        <div class="cs-block" id="cs-op-block" hidden>
+          <div class="cs-head"><span>Chat opacity</span><span id="cs-op-val" class="cs-val">75%</span></div>
+          <input id="cs-opacity" type="range" min="20" max="100" step="5" aria-label="Chat opacity percentage">
+        </div>
         <div class="cs-block">
           <div class="cs-head"><span>Chat width</span><span id="cs-width-val" class="cs-val">30%</span></div>
           <input id="cs-width" type="range" min="15" max="50" step="1" aria-label="Chat width percentage">

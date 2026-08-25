@@ -128,10 +128,22 @@ The gear at the top of the chat column opens:
 - **Shorten names to first letter** — collapses every display name to its
   initial to reclaim width. Badges are kept, and hovering a message slides the
   rest of that name back into view.
+- **Hide Chat Bot messages** — drops every message from anyone carrying the
+  Chat Bot badge (Fossabot, StreamElements and friends), so the log is just the
+  people watching.
+- **Hide `!` commands** — drops messages that *start* with a bang — `!match`,
+  `!followage`, `!uptime`. A `!` mid-sentence, or plain excitement like `!!!`,
+  is left alone.
+- **Draw chat over the video** — removes the chat panel's background and lets
+  the video widen to the full window, with chat drawn on top of it like a
+  stream overlay. A **Chat opacity** slider (20–100 %) appears with it to fade
+  the text and emotes back as far as you like; a soft dark outline keeps them
+  readable over bright scenes.
 - **Chat width** — sets the column as a percentage of the window (15–50 %),
-  applied live as you drag.
+  applied live as you drag. In overlay mode this is how much of the video the
+  chat is drawn across.
 
-All three persist across VODs and restarts, and apply immediately to messages
+All of them persist across VODs and restarts, and apply immediately to messages
 already on screen.
 
 ## Emotes

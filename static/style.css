@@ -270,6 +270,36 @@ button {
 #back-btn-ctl { display: none; }
 #player-view.no-chat #back-btn-ctl { display: inline-flex; }
 
+/* Chat drawn over the video. The column moves into the *same grid cell* as the
+   stage rather than being absolutely positioned, so the video simply takes the
+   full width underneath it and the controls row is untouched.
+   :not(.no-chat) so an unpaired VOD, which has no chat at all, still wins. */
+#player-view.chat-overlay:not(.no-chat) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "stage"
+    "controls";
+}
+#player-view.chat-overlay:not(.no-chat) #chat-col {
+  grid-area: stage;
+  justify-self: end;          /* hug the right edge, over the video */
+  width: var(--chat-w, 380px);
+  max-width: 100%;
+  z-index: 2;
+  background: transparent;
+  border-left: none;
+}
+#player-view.chat-overlay:not(.no-chat) #chat-header {
+  background: transparent;
+  border-bottom: none;
+}
+#player-view.chat-overlay:not(.no-chat) #chat-messages {
+  opacity: var(--chat-op, 0.75);
+  /* Light text over an arbitrarily bright scene needs a dark rim to stay
+     readable — the same trick stream overlays use. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(0, 0, 0, 0.75);
+}
+
 /* overflow:hidden clips the zoomed video to the stage instead of letting it
    spill over the chat column and controls. */
 #stage { grid-area: stage; position: relative; min-width: 0; min-height: 0; overflow: hidden; }
@@ -314,6 +344,7 @@ button {
 .cs-row input { accent-color: var(--accent); margin: 1px 0 0; flex: none; cursor: pointer; }
 .cs-label { flex: 1; min-width: 0; }
 .cs-hint { display: block; margin-top: 2px; color: var(--text-dim); font-size: 11.5px; }
+.cs-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .cs-block { margin-top: 14px; }
 .cs-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
 .cs-val { color: var(--text-dim); font-variant-numeric: tabular-nums; }
@@ -344,6 +375,11 @@ button {
   transition: max-width 0.18s ease;
 }
 #chat-col.short-names .msg .name:hover .nm-rest { max-width: 24ch; }
+
+/* Message filters. Tagged at render time, hidden with CSS, so toggling either
+   one applies instantly to messages already on screen. */
+#chat-col.hide-bots .msg.is-bot { display: none; }
+#chat-col.hide-cmds .msg.is-cmd { display: none; }
 
 #chat-scroll {
   flex: 1; min-height: 0;
