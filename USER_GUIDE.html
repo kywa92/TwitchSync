@@ -555,7 +555,7 @@ python3 server.py --port 9000 --no-open</code></pre>
   <ul class="legend">
     <li><span class="n">1</span><strong>Video stage.</strong> The gameplay video, letterboxed on black by default so nothing is ever cropped — or filling the frame if you turn on <a href="#zoom">Fill screen</a>. Click it to play/pause; double-click it for fullscreen; scroll to zoom and drag to pan.</li>
     <li><span class="n">2</span><strong>Chat column.</strong> The stream&rsquo;s chat, rendered live from the log and always showing the messages for the current video time. The <strong>&lsaquo;</strong> button in its header returns to the library, and the <strong>gear</strong> opens <a href="#chat-settings">chat settings</a> (timestamps, name length, column width). VODs without a chat file open without this column at all.</li>
-    <li><span class="n">3</span><strong>Control bar.</strong> One set of controls for everything, spanning the full window: play/pause, elapsed&nbsp;/&nbsp;total time, the seek bar with the chat-activity graph, autoplay, loop, playback speed, zoom, volume, and fullscreen.</li>
+    <li><span class="n">3</span><strong>Control bar.</strong> One set of controls for everything, spanning the full window: play/pause, mute and volume, elapsed&nbsp;/&nbsp;total time, the seek bar with the chat-activity graph, autoplay, loop, playback speed, zoom, and fullscreen.</li>
   </ul>
 </div>
 
@@ -661,12 +661,12 @@ python3 server.py --port 9000 --no-open</code></pre>
 <table class="wrap-ok">
   <tr><th>Control</th><th>Behavior</th></tr>
   <tr><td><strong>Play / pause</strong></td><td>Toggles playback. The icon reflects the current state. Clicking the video itself does the same thing.</td></tr>
+  <tr><td><strong>Mute + volume</strong></td><td>The speaker button toggles mute; the slider sets volume. Moving the slider un-mutes. Both are remembered across sessions.</td></tr>
   <tr><td><strong>Time readout</strong></td><td><code>elapsed / total</code>, e.g. <code>3:00:15&nbsp;/&nbsp;6:47:26</code>. Uses <code>H:MM:SS</code> whenever the VOD is an hour or longer. While you drag the seek bar it previews the target time.</td></tr>
   <tr><td><strong>Autoplay next</strong></td><td>When lit, the end of a VOD rolls straight into the next one in the library&rsquo;s current sort order. The same switch appears on the library toolbar — it&rsquo;s one setting in two places.</td></tr>
   <tr><td><strong>Loop</strong></td><td>Repeats the current VOD instead of ending. Deliberately <em>not</em> remembered — it resets every time you open a video, so a loop you set once can never surprise you later.</td></tr>
   <tr><td><strong>Speed</strong> (<code>1×</code>)</td><td>Opens a menu: 0.25× — 2× with &ldquo;Normal&rdquo; = 1×. Your choice is remembered for future sessions. Audio stays pitch-corrected (a browser feature), so voices sound natural at 1.25–1.5×.</td></tr>
   <tr><td><strong>Zoom</strong> (magnifier)</td><td>Opens the zoom panel — zoom slider, <em>Fill screen</em>, and Reset. See <a href="#zoom">Zoom and pan</a> above.</td></tr>
-  <tr><td><strong>Mute + volume</strong></td><td>The speaker button toggles mute; the slider sets volume. Moving the slider un-mutes. Both are remembered across sessions.</td></tr>
   <tr><td><strong>Fullscreen</strong></td><td>Expands the <em>whole layout</em> — video, chat, and controls — to the screen, so you keep chat while fullscreen, just like Twitch&rsquo;s theater-plus-chat. While playing in fullscreen the controls fade out after 3 seconds of no mouse movement (and the cursor hides); move the mouse or press any shortcut to bring them back. <kbd>F</kbd> or <kbd>Esc</kbd> exits.</td></tr>
 </table>
 
@@ -699,7 +699,7 @@ python3 server.py --port 9000 --no-open</code></pre>
   <li><strong>Timestamp</strong> — the VOD time the message was sent (<code>3:00:15</code>), in dim gray, matching the player clock. Handy for confirming sync at a glance or citing a moment.</li>
   <li><strong>Badges</strong> — subscriber, moderator, Prime, bits, and event badges, from the images embedded in the log.</li>
   <li><strong>Username</strong> — in the user&rsquo;s chosen chat color. Users who never picked one get the same default color Twitch would assign, and colors that would be unreadably dark on the dark background are automatically brightened.</li>
-  <li><strong>The message</strong> — with Twitch, BTTV, FFZ, and 7TV emotes shown as images. Animated GIF/WebP emotes animate. &ldquo;Zero-width&rdquo; emotes (effects like rain or sparkles designed to sit <em>on top of</em> another emote) overlay their base emote exactly as on Twitch. <code>@mentions</code> are bolded. Everything is real text — you can select and copy it.</li>
+  <li><strong>The message</strong> — with Twitch, BTTV, FFZ, and 7TV emotes shown as images. Animated GIF/WebP emotes animate. &ldquo;Zero-width&rdquo; emotes (effects like rain or sparkles designed to sit <em>on top of</em> another emote) overlay their base emote exactly as on Twitch. <code>@mentions</code> are bolded and drawn in the colour of the person being mentioned, so you can pick out replies to yourself or to a friend at a glance. TwitchSync learns those colours from the chat log itself; someone who never typed during the stream (often the streamer) gets Twitch&rsquo;s own default colour for their name. Everything is real text — you can select and copy it.</li>
 </ul>
 
 <h3>How the sync works (from the viewer&rsquo;s seat)</h3>
@@ -712,7 +712,7 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <h3 id="chat-settings">Chat settings</h3>
 
-<p>The gear at the top-right of the chat column opens six options. All of them apply <em>immediately</em> — including to messages already on screen — and are remembered across VODs and restarts.</p>
+<p>The gear at the top-right of the chat column opens seven options. All of them apply <em>immediately</em> — including to messages already on screen — and are remembered across VODs and restarts.</p>
 
 <table class="wrap-ok">
   <tr><th>Setting</th><th>What it does</th></tr>
@@ -733,6 +733,10 @@ python3 server.py --port 9000 --no-open</code></pre>
     <td>Hides messages that <em>begin</em> with a bang — <code>!match</code>, <code>!followage</code>, <code>!uptime</code>, <code>!drops</code> — which are viewers talking to a bot rather than to the stream. Only a leading bang counts: <em>&ldquo;hey !match was close&rdquo;</em> stays, and so does plain excitement like <code>!!!</code>.</td>
   </tr>
   <tr>
+    <td><strong>Hide messages containing&hellip;</strong></td>
+    <td>A box of your own phrases, <strong>one per line</strong>; any message containing one of them is hidden. This is the catch-all for the noise the two switches above miss — subscription and resub announcements are the usual reason, since Twitch posts those as ordinary chat messages from the subscriber rather than from a badged bot, so nothing else filters them. Entering <code>RESUB HYPE!</code> and <code>subscribed with Prime.</code> removes both halves of the usual sub-notice chatter. Matching is <strong>case-insensitive</strong> and looks <strong>anywhere in the message</strong>, not just at the start, and it searches the message&rsquo;s underlying text — so emote names count too, and a phrase like <code>LUL</code> hides messages that show only that emote. It is a plain substring match with no wildcards, so a short phrase catches more than you might expect (<code>LUL</code> also matches <code>OMEGALUL</code>); prefer a distinctive phrase. The list applies as you type, so you can watch the messages disappear and adjust. Blank lines and repeats are ignored, and the count beside the heading confirms how many phrases are live.</td>
+  </tr>
+  <tr>
     <td><strong>Draw chat over the video</strong></td>
     <td>Turns the chat column into an overlay: its panel background disappears, the video widens to fill the whole window, and the messages are drawn straight on top of the picture — the way chat sits over gameplay in a stream layout. A <strong>Chat opacity</strong> slider (20&nbsp;%–100&nbsp;%) appears alongside it so you can fade the text and emotes back until they sit quietly over the action; messages get a soft dark outline so they stay readable over a bright scene. The header, back arrow and this gear stay at full strength so the controls never become hard to find. In this mode <em>Chat width</em> sets how much of the video chat is drawn across, and a VOD with no chat file is unaffected.</td>
   </tr>
@@ -742,7 +746,7 @@ python3 server.py --port 9000 --no-open</code></pre>
   </tr>
 </table>
 
-<p><strong>Reset to defaults</strong> at the bottom of the panel puts them all back (timestamps on, full names, nothing hidden, default width).</p>
+<p><strong>Reset to defaults</strong> at the bottom of the panel puts them all back (timestamps on, full names, no hidden phrases, nothing filtered, default width).</p>
 
 <div class="callout tip"><p class="label">Note</p>
 <p>A VOD with no chat file — an <a href="#unpaired">unpaired video</a> — opens with the chat column removed altogether and the video across the full width. The gear goes with it, and a back arrow appears in the control bar instead.</p></div>

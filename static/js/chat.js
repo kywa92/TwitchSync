@@ -14,6 +14,13 @@ const BOT_BADGE_TITLE = "Chat Bot";
 // plain excitement ("!!!") is never mistaken for one.
 const CMD_RE = /^\s*![a-z0-9]/i;
 
+// A chatter's on-screen colour: the one they picked, else Twitch's own
+// deterministic hash of their login, lifted to stay readable on the dark
+// panel. Shared by the name and by "@name" mentions of them, so the two
+// always agree.
+const nameColor = (userColor, login, display) =>
+  readableColor(userColor || colorHash(login || display));
+
 const PIN_CAP = 200;      // max messages in DOM while pinned to bottom
 const UNPIN_CAP = 500;    // hard bound while the user reads scrollback
 const BACKFILL = 50;      // messages rendered above the seek point for context
@@ -31,7 +38,46 @@ const CHAT_W_DEFAULT = 30; // ≈ the stylesheet's 380px at a typical window
 const CHAT_OP_MIN = 20;    // percent; below this the text is unreadable over video
 const CHAT_OP_MAX = 100;
 const CHAT_OP_DEFAULT = 75;
+const HIDE_TEXT_DEBOUNCE = 300; // ms after the last keystroke before re-filtering
 let csBound = false;
+
+// Phrases whose presence hides a message. Unlike the bot and ! filters these
+// cannot be a fixed class plus a CSS toggle: the list itself changes while
+// messages are on screen, so each one has to be re-judged. Kept parsed at
+// module scope so tagging a new message costs no parse of its own.
+let hideTexts = [];
+
+// The text each message was rendered from, lowercased, for that re-judging.
+// A WeakMap rather than a data- attribute: the same string would otherwise be
+// duplicated into the DOM for every one of the tens of thousands of messages a
+// stream renders, and entries here die with the node they describe.
+const msgText = new WeakMap();
+
+// Trimmed, blank lines dropped, de-duplicated case-insensitively: a phrase
+// listed twice would inflate the count and match twice for nothing. The first
+// spelling wins, so the list keeps the viewer's own capitalisation and the
+// textarea shows it back unchanged; matching lowercases both sides.
+function normHideList(list) {
+  const out = [], seen = new Set();
+  for (const x of list) {
+    const phrase = String(x).trim();
+    const key = phrase.toLowerCase();
+    if (!phrase || seen.has(key)) continue;
+    seen.add(key);
+    out.push(phrase);
+  }
+  return out;
+}
+
+function readHideTexts() {
+  try {
+    const raw = JSON.parse(lsGet("ts.chatHideText") || "[]");
+    return Array.isArray(raw) ? normHideList(raw) : [];
+  } catch {
+    return [];
+  }
+}
+const matchesHideText = (lower) => hideTexts.some((p) => lower.includes(p));
 
 // Non-finite input (a garbled stored value, or a measurement taken while the
 // window reports zero width) falls back to the default instead of NaN.
@@ -48,6 +94,10 @@ export function applyChatSettings() {
   col.classList.toggle("short-names", lsGet("ts.chatShortNames") === "1");
   col.classList.toggle("hide-bots", lsGet("ts.chatHideBots") === "1");
   col.classList.toggle("hide-cmds", lsGet("ts.chatHideCmds") === "1");
+  hideTexts = readHideTexts().map((p) => p.toLowerCase());
+  for (const m of col.querySelectorAll(".msg")) {
+    m.classList.toggle("is-filtered", matchesHideText(msgText.get(m) || ""));
+  }
   view.classList.toggle("chat-overlay", lsGet("ts.chatOverlay") === "1");
   view.style.setProperty("--chat-op",
     String(clampChatOpacity(parseFloat(lsGet("ts.chatOpacity"))) / 100));
@@ -69,6 +119,8 @@ export function setupChatSettings() {
   const shortBox = $("cs-shortnames");
   const botBox = $("cs-hidebots");
   const cmdBox = $("cs-hidecmds");
+  const hideText = $("cs-hidetext");
+  const hideTextVal = $("cs-text-val");
   const width = $("cs-width");
   const widthVal = $("cs-width-val");
   const overlayBox = $("cs-overlay");
@@ -76,12 +128,18 @@ export function setupChatSettings() {
   const opVal = $("cs-op-val");
   const opBlock = $("cs-op-block");
 
+  const showPhraseCount = (n) => {
+    hideTextVal.textContent = n ? n + (n === 1 ? " phrase" : " phrases") : "";
+  };
   const syncControls = () => {
     tsBox.checked = lsGet("ts.chatTimestamps") !== "0";
     shortBox.checked = lsGet("ts.chatShortNames") === "1";
     botBox.checked = lsGet("ts.chatHideBots") === "1";
     cmdBox.checked = lsGet("ts.chatHideCmds") === "1";
     overlayBox.checked = lsGet("ts.chatOverlay") === "1";
+    const phrases = readHideTexts();
+    hideText.value = phrases.join("\n");
+    showPhraseCount(phrases.length);
     // The opacity slider only means anything in overlay mode, so it appears
     // with it rather than sitting there inert.
     opBlock.hidden = !overlayBox.checked;
@@ -133,6 +191,22 @@ export function setupChatSettings() {
     lsSet("ts.chatHideCmds", cmdBox.checked ? "1" : "0");
     applyChatSettings();
   });
+  let hideTextTimer = 0;
+  hideText.addEventListener("input", () => {
+    clearTimeout(hideTextTimer);
+    // Debounced: applied on every keystroke, a phrase one or two characters in
+    // would briefly blank most of the log while it is still being typed.
+    hideTextTimer = setTimeout(() => {
+      const list = normHideList(hideText.value.split("\n"));
+      // The textarea is never written back from this list: rewriting it would
+      // fight the caret. Blank lines and stray spaces are dropped on the way
+      // to storage, and reappear tidied the next time the panel is opened.
+      if (list.length) lsSet("ts.chatHideText", JSON.stringify(list));
+      else lsDel("ts.chatHideText");
+      showPhraseCount(list.length);
+      applyChatSettings();
+    }, HIDE_TEXT_DEBOUNCE);
+  });
   overlayBox.addEventListener("change", () => {
     lsSet("ts.chatOverlay", overlayBox.checked ? "1" : "0");
     opBlock.hidden = !overlayBox.checked;
@@ -156,6 +230,7 @@ export function setupChatSettings() {
     lsDel("ts.chatShortNames");
     lsDel("ts.chatHideBots");
     lsDel("ts.chatHideCmds");
+    lsDel("ts.chatHideText");
     lsDel("ts.chatOverlay");
     lsDel("ts.chatOpacity");
     applyChatSettings();
@@ -185,6 +260,7 @@ export class Chat {
 
     this.comments = null;
     this.times = null;
+    this.userColors = null;
     this.firstParty = null;
     this.thirdParty = null;
     this.badges = null;
@@ -250,6 +326,7 @@ export class Chat {
     this.pill.hidden = true;
     this.emoteTip.hidden = true;
     this.comments = this.times = null;
+    this.userColors = null;
     this.firstParty = this.thirdParty = this.badges = null;
   }
 
@@ -278,7 +355,20 @@ export class Chat {
     this.comments = comments;
     const n = comments.length;
     this.times = new Float64Array(n);
-    for (let i = 0; i < n; i++) this.times[i] = comments[i].content_offset_seconds || 0;
+    // The same pass records each chatter's colour, keyed by login and by
+    // display name, so an "@name" written by someone else can be drawn in
+    // that person's colour. Later messages win: a viewer who changes colour
+    // mid-stream is shown as whatever they ended on.
+    this.userColors = new Map();
+    for (let i = 0; i < n; i++) {
+      const c = comments[i];
+      this.times[i] = c.content_offset_seconds || 0;
+      const cm = c.commenter || {};
+      if (!cm.name && !cm.display_name) continue;
+      const col = nameColor(c.message && c.message.user_color, cm.name, cm.display_name);
+      if (cm.name) this.userColors.set(cm.name.toLowerCase(), col);
+      if (cm.display_name) this.userColors.set(cm.display_name.toLowerCase(), col);
+    }
 
     const ed = data.embeddedData || {};
 
@@ -367,7 +457,7 @@ export class Chat {
     const commenter = c.commenter || {};
     const full = commenter.display_name || commenter.name || "?";
     const name = el("span", "name");
-    name.style.color = readableColor(m.user_color || colorHash(commenter.name || commenter.display_name));
+    name.style.color = nameColor(m.user_color, commenter.name, commenter.display_name);
     // Always split off everything after the first character into its own span:
     // the "shorten names" setting then collapses it with CSS alone, so the
     // toggle applies instantly to messages already on screen and the full name
@@ -389,6 +479,11 @@ export class Chat {
       ? m.body
       : (m.fragments || []).map((f) => (f && f.text) || "").join("");
     if (CMD_RE.test(text)) msg.classList.add("is-cmd");
+    // Matched against the source text, not the rendered node: emote names live
+    // in img alt attributes, which textContent would not return.
+    const lower = text.toLowerCase();
+    msgText.set(msg, lower);
+    if (matchesHideText(lower)) msg.classList.add("is-filtered");
     return msg;
   }
 
@@ -448,7 +543,10 @@ export class Chat {
         if (word.length > 1 && word[0] === "@") {
           pendingText += sep;
           flush();
-          body.append(el("span", "mention", word));
+          const at = el("span", "mention", word);
+          const col = this._mentionColor(word);
+          if (col) at.style.color = col;
+          body.append(at);
           sinceEmote += word;
           continue;
         }
@@ -457,6 +555,20 @@ export class Chat {
       }
     }
     flush();
+  }
+
+  // "@name", "@name," and "@name:" all address the same person, so the lookup
+  // key stops at the first character a Twitch login cannot contain.
+  _mentionColor(word) {
+    const m = /^@([a-z0-9_]+)/i.exec(word);
+    if (!m) return "";           // "@!?" and friends: not a name, leave it be
+    const login = m[1].toLowerCase();
+    const known = this.userColors && this.userColors.get(login);
+    // Nobody by that name spoke in this log — a lurker, or a streamer who
+    // never typed. Fall back to the hash Twitch uses for a chatter who never
+    // picked a colour, so every mention of one name is at least consistent
+    // with itself throughout the VOD.
+    return known || readableColor(colorHash(login));
   }
 
   // ---- sync engine -------------------------------------------------------

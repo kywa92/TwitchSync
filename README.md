@@ -108,8 +108,11 @@ visible backlog instantly rather than replaying up to that point.
 
 - **Faithful rendering** — subscriber/moderator/broadcaster badges, each
   chatter's own Twitch colour (colours too dark to read on the dark panel are
-  lifted, as Twitch does in dark mode), and `@mentions` picked out. Text stays
-  selectable for copying.
+  lifted, as Twitch does in dark mode), and `@mentions` drawn in the colour of
+  the person being mentioned rather than plain white, so replies to one person
+  are easy to follow. Those colours are read out of the chat log itself;
+  anyone who never typed during the stream falls back to Twitch's own default
+  colour for that name. Text stays selectable for copying.
 - **Emotes** — first-party Twitch plus BTTV/7TV emotes embedded in the VOD's
   own JSON, with anything missing filled in from `emote-cache/`. Animated
   GIF/WebP emotes animate, and zero-width emotes stack over the emote before
@@ -134,6 +137,13 @@ The gear at the top of the chat column opens:
 - **Hide `!` commands** — drops messages that *start* with a bang — `!match`,
   `!followage`, `!uptime`. A `!` mid-sentence, or plain excitement like `!!!`,
   is left alone.
+- **Hide messages containing…** — a box of your own phrases, one per line;
+  any message containing one of them is hidden. Case-insensitive, matched
+  anywhere in the message, and against the underlying text so emote names
+  count too. This is what catches sub and resub announcements: Twitch posts
+  those as ordinary messages from the subscriber, not from a badged bot, so
+  `RESUB HYPE!` and `subscribed with Prime.` are the two lines most libraries
+  want. It applies as you type, and blank or repeated lines are ignored.
 - **Draw chat over the video** — removes the chat panel's background and lets
   the video widen to the full window, with chat drawn on top of it like a
   stream overlay. A **Chat opacity** slider (20–100 %) appears with it to fade
