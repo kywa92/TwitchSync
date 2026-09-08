@@ -109,8 +109,12 @@
         </label>
         <label class="cs-row">
           <input id="cs-shortnames" type="checkbox">
-          <span class="cs-label">Shorten names to first letter<span class="cs-hint">Hover a message to reveal the full name</span></span>
+          <span class="cs-label">Shorten names<span class="cs-hint">Display names and @mentions. Hover one to reveal the rest</span></span>
         </label>
+        <div class="cs-block" id="cs-len-block" hidden>
+          <div class="cs-head"><span>Shortened to</span><span id="cs-len-val" class="cs-val">1 character</span></div>
+          <input id="cs-namelen" type="range" min="1" max="10" step="1" aria-label="Characters kept when names are shortened">
+        </div>
         <label class="cs-row">
           <input id="cs-hidebots" type="checkbox">
           <span class="cs-label">Hide Chat Bot messages<span class="cs-hint">Anyone carrying the Chat Bot badge</span></span>

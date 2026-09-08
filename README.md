@@ -128,9 +128,12 @@ visible backlog instantly rather than replaying up to that point.
 The gear at the top of the chat column opens:
 
 - **Show message timestamps** — hide the per-message time.
-- **Shorten names to first letter** — collapses every display name to its
-  initial to reclaim width. Badges are kept, and hovering a message slides the
-  rest of that name back into view.
+- **Shorten names** — cuts display names down to their first few characters to
+  reclaim width, along with the `@mentions` inside messages (the `@` and any
+  trailing punctuation stay put, so `@Moder,` still reads correctly). Badges
+  and per-user colours are kept, and hovering a name or a mention slides the
+  rest of it back into view. A **Shortened to** slider sets the length, 1–10
+  characters, applied live.
 - **Hide Chat Bot messages** — drops every message from anyone carrying the
   Chat Bot badge (Fossabot, StreamElements and friends), so the log is just the
   people watching.

@@ -712,7 +712,7 @@ python3 server.py --port 9000 --no-open</code></pre>
 
 <h3 id="chat-settings">Chat settings</h3>
 
-<p>The gear at the top-right of the chat column opens seven options. All of them apply <em>immediately</em> — including to messages already on screen — and are remembered across VODs and restarts.</p>
+<p>The gear at the top-right of the chat column opens eight options. All of them apply <em>immediately</em> — including to messages already on screen — and are remembered across VODs and restarts.</p>
 
 <table class="wrap-ok">
   <tr><th>Setting</th><th>What it does</th></tr>
@@ -721,8 +721,12 @@ python3 server.py --port 9000 --no-open</code></pre>
     <td>On by default. Turn it off to drop the <code>3:00:15</code> in front of every message and reclaim that width for the messages themselves.</td>
   </tr>
   <tr>
-    <td><strong>Shorten names to first letter</strong></td>
-    <td>Collapses every display name down to its initial — <em>&ldquo;M: nice shot&rdquo;</em> instead of <em>&ldquo;Moderator_Mike: nice shot&rdquo;</em> — which claws back a lot of horizontal space in a narrow column, and makes a fast chat much easier to skim. <strong>Badges are kept</strong>, so moderators, subscribers and bots are still identifiable at a glance. Hover any message and that name slides back out to its full length, then slides away when you move off.</td>
+    <td><strong>Shorten names</strong></td>
+    <td>Cuts every display name down to its first few characters — <em>&ldquo;Moder: nice shot&rdquo;</em> instead of <em>&ldquo;Moderator_Mike: nice shot&rdquo;</em> — which claws back a lot of horizontal space in a narrow column and makes a fast chat much easier to skim. <strong>@mentions inside messages are cut to the same length</strong>, with the <code>@</code> kept as a marker and any trailing comma or colon left in place, so <em>&ldquo;@Moder,&rdquo;</em> still reads as the end of a clause. <strong>Badges are kept</strong>, so moderators, subscribers and bots stay identifiable at a glance, and each name keeps its own colour. Hover a name or a mention and the rest of it slides back into view, then slides away when you move off.</td>
+  </tr>
+  <tr>
+    <td><strong>Shortened to</strong></td>
+    <td>How many characters survive the cut, from 1 to 10 — it appears under the switch above and applies live as you drag, to the messages already on screen as well as new ones. One character is the tightest (<em>&ldquo;M:&rdquo;</em>) and the original behaviour; four or five is usually enough to tell regulars apart at a glance while still saving most of the width.</td>
   </tr>
   <tr>
     <td><strong>Hide Chat Bot messages</strong></td>
@@ -784,7 +788,7 @@ python3 server.py --port 9000 --no-open</code></pre>
   <li><strong>Watching on a laptop?</strong> Below ~1100&nbsp;px of window width the chat column narrows automatically so the video keeps most of the room — or set the width yourself in <a href="#chat-settings">chat settings</a>.</li>
   <li><strong>Kill the black bars for good.</strong> Turn on <em>Fill screen</em> in the zoom panel once and every VOD crops to fill the player from then on. Pair it with a narrower chat column if you want the video as large as possible.</li>
   <li><strong>Build a themed session.</strong> Filter to one game (or a couple), sort by date, and tick <em>Autoplay next</em> — the filtered, sorted list becomes the playlist and plays through on its own.</li>
-  <li><strong>Skim a busy chat.</strong> In a narrow column, <em>Shorten names to first letter</em> roughly doubles the room for the messages themselves; hover any line when you need to know who said it.</li>
+  <li><strong>Skim a busy chat.</strong> In a narrow column, <em>Shorten names</em> roughly doubles the room for the messages themselves &mdash; try four or five characters, which usually still tells the regulars apart; hover a name when you need the rest of it.</li>
   <li><strong>Jump the music blocks.</strong> Red bars on the seek bar are muted stretches — when you land in one, click the timestamp in the notice to skip straight to where the audio returns.</li>
   <li><strong>Reclaim disk space.</strong> Once you&rsquo;re happy with TwitchSync, the old <code>…&nbsp;-&nbsp;CHAT.mp4</code> renders are dead weight — several GB each that the app never touches.</li>
   <li><strong>Keep names in sync when renaming.</strong> If you tidy up filenames, rename the <code>.mp4</code> and <code>.json</code> identically or the pair won&rsquo;t be matched.</li>

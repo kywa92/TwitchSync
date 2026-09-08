@@ -352,7 +352,7 @@ button {
 /* Longer label than the slider blocks': the count shrinks so the pair
    stays on one line inside the 244px panel. */
 #cs-text-val { font-size: 11.5px; }
-#cs-width { width: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }
+#cs-width, #cs-namelen, #cs-opacity { width: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }
 #cs-hidetext {
   display: block; width: 100%; resize: vertical; min-height: 56px;
   padding: 6px 8px; background: var(--bg); color: var(--text);
@@ -386,7 +386,8 @@ button {
   max-width: 0; overflow: hidden; white-space: nowrap;
   transition: max-width 0.18s ease;
 }
-#chat-col.short-names .msg .name:hover .nm-rest { max-width: 24ch; }
+#chat-col.short-names .msg .name:hover .nm-rest,
+#chat-col.short-names .msg .mention:hover .nm-rest { max-width: 24ch; }
 
 /* Message filters. Tagged at render time, hidden with CSS, so toggling either
    one applies instantly to messages already on screen. */

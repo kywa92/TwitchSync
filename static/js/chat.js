@@ -39,7 +39,48 @@ const CHAT_OP_MIN = 20;    // percent; below this the text is unreadable over vi
 const CHAT_OP_MAX = 100;
 const CHAT_OP_DEFAULT = 75;
 const HIDE_TEXT_DEBOUNCE = 300; // ms after the last keystroke before re-filtering
+const NAME_LEN_MIN = 1;    // characters kept when names are shortened
+const NAME_LEN_MAX = 10;   // past this, shortening stops buying any width back
+const NAME_LEN_DEFAULT = 1;
 let csBound = false;
+
+// How many characters of a name survive shortening. Module state rather than a
+// re-read of localStorage per message: every name and mention rendered consults
+// it. 0 is impossible, so the first applyChatSettings() always does the split.
+let nameLen = 0;
+
+const clampNameLen = (n) =>
+  Number.isFinite(n) ? Math.min(NAME_LEN_MAX, Math.max(NAME_LEN_MIN, Math.round(n))) : NAME_LEN_DEFAULT;
+
+// Names are always split, whether or not shortening is on: .nm-rest is what
+// CSS collapses, so the switch itself costs nothing and the full name stays in
+// the DOM for selection and copying. Array.from splits by code point, so a name
+// starting with an emoji or a surrogate pair is never cut in half.
+function renderName(node, full, keep) {
+  node.textContent = "";
+  const chars = Array.from(full);
+  node.append(document.createTextNode(chars.slice(0, keep).join("") || "?"));
+  if (chars.length > keep) node.append(el("span", "nm-rest", chars.slice(keep).join("")));
+}
+
+// "@name", "@name," and "@name:" all name the same person. Splitting the
+// trailing punctuation off keeps it visible next to the shortened name — an
+// "@Stea," still reads as the end of a sentence — instead of hiding it with
+// the rest. A mention written with a non-ASCII display name has no ASCII login
+// run to split on, so the whole word after the @ is treated as the name.
+function splitMention(word) {
+  const m = /^@([a-z0-9_]+)(.*)$/i.exec(word);
+  return m ? { name: m[1], trailer: m[2] } : { name: word.slice(1), trailer: "" };
+}
+
+function renderMention(node, word, keep) {
+  node.textContent = "";
+  const { name, trailer } = splitMention(word);
+  const chars = Array.from(name);
+  node.append(document.createTextNode("@" + chars.slice(0, keep).join("")));
+  if (chars.length > keep) node.append(el("span", "nm-rest", chars.slice(keep).join("")));
+  if (trailer) node.append(document.createTextNode(trailer));
+}
 
 // Phrases whose presence hides a message. Unlike the bot and ! filters these
 // cannot be a fixed class plus a CSS toggle: the list itself changes while
@@ -94,6 +135,17 @@ export function applyChatSettings() {
   col.classList.toggle("short-names", lsGet("ts.chatShortNames") === "1");
   col.classList.toggle("hide-bots", lsGet("ts.chatHideBots") === "1");
   col.classList.toggle("hide-cmds", lsGet("ts.chatHideCmds") === "1");
+  // Re-split only when the length actually moved: this runs on every drag of
+  // the opacity and width sliders too, and rebuilding a few hundred names at
+  // 60 Hz for a setting that did not change would be pure jank.
+  const keep = clampNameLen(parseFloat(lsGet("ts.chatNameLen")));
+  if (keep !== nameLen) {
+    nameLen = keep;
+    // textContent of a split name is the whole name again, so the previous
+    // split is all the state the next one needs.
+    for (const n of col.querySelectorAll(".msg .name")) renderName(n, n.textContent, keep);
+    for (const a of col.querySelectorAll(".msg .mention")) renderMention(a, a.textContent, keep);
+  }
   hideTexts = readHideTexts().map((p) => p.toLowerCase());
   for (const m of col.querySelectorAll(".msg")) {
     m.classList.toggle("is-filtered", matchesHideText(msgText.get(m) || ""));
@@ -117,6 +169,9 @@ export function setupChatSettings() {
   const pop = $("chat-settings-pop");
   const tsBox = $("cs-timestamps");
   const shortBox = $("cs-shortnames");
+  const lenRange = $("cs-namelen");
+  const lenVal = $("cs-len-val");
+  const lenBlock = $("cs-len-block");
   const botBox = $("cs-hidebots");
   const cmdBox = $("cs-hidecmds");
   const hideText = $("cs-hidetext");
@@ -128,12 +183,21 @@ export function setupChatSettings() {
   const opVal = $("cs-op-val");
   const opBlock = $("cs-op-block");
 
+  const showNameLen = (n) => {
+    lenVal.textContent = n + (n === 1 ? " character" : " characters");
+  };
   const showPhraseCount = (n) => {
     hideTextVal.textContent = n ? n + (n === 1 ? " phrase" : " phrases") : "";
   };
   const syncControls = () => {
     tsBox.checked = lsGet("ts.chatTimestamps") !== "0";
     shortBox.checked = lsGet("ts.chatShortNames") === "1";
+    // The length only means anything while shortening is on, so it appears
+    // with it rather than sitting there inert.
+    lenBlock.hidden = !shortBox.checked;
+    const len = clampNameLen(parseFloat(lsGet("ts.chatNameLen")));
+    lenRange.value = String(len);
+    showNameLen(len);
     botBox.checked = lsGet("ts.chatHideBots") === "1";
     cmdBox.checked = lsGet("ts.chatHideCmds") === "1";
     overlayBox.checked = lsGet("ts.chatOverlay") === "1";
@@ -181,6 +245,13 @@ export function setupChatSettings() {
   });
   shortBox.addEventListener("change", () => {
     lsSet("ts.chatShortNames", shortBox.checked ? "1" : "0");
+    lenBlock.hidden = !shortBox.checked;
+    applyChatSettings();
+  });
+  lenRange.addEventListener("input", () => {
+    const v = clampNameLen(parseFloat(lenRange.value));
+    showNameLen(v);
+    lsSet("ts.chatNameLen", String(v));
     applyChatSettings();
   });
   botBox.addEventListener("change", () => {
@@ -228,6 +299,7 @@ export function setupChatSettings() {
     lsDel("ts.chatWidth");
     lsDel("ts.chatTimestamps");
     lsDel("ts.chatShortNames");
+    lsDel("ts.chatNameLen");
     lsDel("ts.chatHideBots");
     lsDel("ts.chatHideCmds");
     lsDel("ts.chatHideText");
@@ -458,14 +530,7 @@ export class Chat {
     const full = commenter.display_name || commenter.name || "?";
     const name = el("span", "name");
     name.style.color = nameColor(m.user_color, commenter.name, commenter.display_name);
-    // Always split off everything after the first character into its own span:
-    // the "shorten names" setting then collapses it with CSS alone, so the
-    // toggle applies instantly to messages already on screen and the full name
-    // stays in the DOM for selection and copy. Array.from splits by code point,
-    // so a display name starting with an emoji or a surrogate pair stays whole.
-    const chars = Array.from(full);
-    name.append(document.createTextNode(chars[0] || "?"));
-    if (chars.length > 1) name.append(el("span", "nm-rest", chars.slice(1).join("")));
+    renderName(name, full, nameLen);
     msg.append(name, document.createTextNode(": "));
 
     const body = el("span", "body");
@@ -543,7 +608,8 @@ export class Chat {
         if (word.length > 1 && word[0] === "@") {
           pendingText += sep;
           flush();
-          const at = el("span", "mention", word);
+          const at = el("span", "mention");
+          renderMention(at, word, nameLen);
           const col = this._mentionColor(word);
           if (col) at.style.color = col;
           body.append(at);
